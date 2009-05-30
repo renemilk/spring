@@ -243,7 +243,9 @@ void DataDirLocater::LocateDataDirs()
 	AddDirs(std::string(currentDir));
 #endif
 
+#ifndef UNITSYNC
 	AddDirs(Platform::GetBinaryPath());
+#endif
 
 #ifdef WIN32
 	// my documents
