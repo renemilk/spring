@@ -26,34 +26,29 @@ extern gmlQueue gmlQueues[GML_MAX_NUM_THREADS];
 
 extern boost::thread *gmlThreads[GML_MAX_NUM_THREADS];
 
-#if defined(__GNUC__) && (__GNUC__ >= 4) && (__GNUC_MINOR__ >= 3) && (__GNUC_PATCHLEVEL__ == 0)
-// gcc has issues with attributes in function pointers it seems
-
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlProgramServer;
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlProgramObjectARBServer;
-
-extern gmlSingleItemServer<GLUquadric *, GLUquadric *(*)(void)> gmlQuadricServer;
-
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei,GLuint *)> gmlTextureServer;
-
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlBufferARBServer;
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlFencesNVServer;
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlProgramsARBServer;
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlRenderbuffersEXTServer;
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlFramebuffersEXTServer;
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlQueryServer;
-extern gmlMultiItemServer<GLuint, GLsizei, void (*)(GLsizei, GLuint*)> gmlBufferServer;
-
-extern gmlItemSequenceServer<GLuint, GLsizei,GLuint (*)(GLsizei)> gmlListServer;
-
-#else
-
-extern gmlSingleItemServer<GLhandleARB, PFNGLCREATEPROGRAMPROC *> gmlProgramServer;
-extern gmlSingleItemServer<GLhandleARB, PFNGLCREATEPROGRAMOBJECTARBPROC *> gmlProgramObjectARBServer;
-
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_VERTEX;
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_FRAGMENT;
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_GEOMETRY_EXT;
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderObjectARBServer_VERTEX;
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderObjectARBServer_FRAGMENT;
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderObjectARBServer_GEOMETRY_EXT;
 extern gmlSingleItemServer<GLUquadric *, GLUquadric *(GML_GLAPIENTRY *)(void)> gmlQuadricServer;
 
-extern gmlMultiItemServer<GLuint, GLsizei, void (GML_GLAPIENTRY *)(GLsizei,GLuint *)> gmlTextureServer;
+#if defined(__GNUC__) && (__GNUC__ == 4) && (__GNUC_MINOR__ == 3) && (__GNUC_PATCHLEVEL__ == 0)
+// gcc has issues with attributes in function pointers it seems
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (**)(void)> gmlProgramServer;
+extern gmlSingleItemServer<GLhandleARB, GLhandleARB (**)(void)> gmlProgramObjectARBServer;
+
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlBufferARBServer;
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlFencesNVServer;
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlProgramsARBServer;
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlRenderbuffersEXTServer;
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlFramebuffersEXTServer;
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlQueryServer;
+extern gmlMultiItemServer<GLuint, GLsizei, void (**)(GLsizei, GLuint *)> gmlBufferServer;
+#else
+extern gmlSingleItemServer<GLhandleARB, PFNGLCREATEPROGRAMPROC *> gmlProgramServer;
+extern gmlSingleItemServer<GLhandleARB, PFNGLCREATEPROGRAMOBJECTARBPROC *> gmlProgramObjectARBServer;
 
 extern gmlMultiItemServer<GLuint, GLsizei, PFNGLGENBUFFERSARBPROC *> gmlBufferARBServer;
 extern gmlMultiItemServer<GLuint, GLsizei, PFNGLGENFENCESNVPROC *> gmlFencesNVServer;
@@ -62,18 +57,11 @@ extern gmlMultiItemServer<GLuint, GLsizei, PFNGLGENRENDERBUFFERSEXTPROC *> gmlRe
 extern gmlMultiItemServer<GLuint, GLsizei, PFNGLGENFRAMEBUFFERSEXTPROC *> gmlFramebuffersEXTServer;
 extern gmlMultiItemServer<GLuint, GLsizei, PFNGLGENQUERIESPROC *> gmlQueryServer;
 extern gmlMultiItemServer<GLuint, GLsizei, PFNGLGENBUFFERSPROC *> gmlBufferServer;
-
-extern gmlItemSequenceServer<GLuint, GLsizei,GLuint (GML_GLAPIENTRY *)(GLsizei)> gmlListServer;
-
 #endif
 
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_VERTEX;
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_FRAGMENT;
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_GEOMETRY_EXT;
+extern gmlMultiItemServer<GLuint, GLsizei, void (GML_GLAPIENTRY *)(GLsizei, GLuint *)> gmlTextureServer;
 
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderObjectARBServer_VERTEX;
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderObjectARBServer_FRAGMENT;
-extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderObjectARBServer_GEOMETRY_EXT;
+extern gmlItemSequenceServer<GLuint, GLsizei,GLuint (GML_GLAPIENTRY *)(GLsizei)> gmlListServer;
 
 extern void gmlInit();
 
