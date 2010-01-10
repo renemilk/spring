@@ -1,0 +1,94 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+CFLAGS = -Wall -g
+
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -O0
+else
+	CFLAGS += -O2
+endif
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+
+	mkdir cbuild
+	sh -c "cd cbuild;\
+	       cmake -DCMAKE_INSTALL_PREFIX=/usr -DBINDIR=/usr/games -DCMAKE_VERBOSE_MAKEFILE=1 -DMARCH_FLAG= .."
+
+	touch configure-stamp
+
+build: build-stamp
+
+build-stamp: configure-stamp 
+	dh_testdir
+
+	$(MAKE) -C cbuild
+
+	touch build-stamp
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+
+	rm -rf cbuild
+	rm -rf game/base/*.sdz game/base/spring/*.sdz
+
+	dh_clean 
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_prep
+	dh_installdirs
+
+	$(MAKE) DESTDIR=$(CURDIR)/debian/tmp -C cbuild install
+
+	# Install desktop file (ours is customized with NoDisplay=true)
+	cp -f debian/spring-engine.desktop \
+	      debian/spring-engine/usr/share/applications
+
+	# Remove the embedded font and symlink to system one
+	# This changed from .ttf to .otf in spring 0.80.4, not sure if the symlink will still work
+	#rm debian/spring-engine/usr/share/games/spring/fonts/FreeSansBold.ttf
+	#ln -s /usr/share/fonts/truetype/freefont/FreeSansBold.ttf debian/spring-engine/usr/share/games/spring/fonts/FreeSansBold.ttf
+
+	# Configure spring to use ~/.spring as r/w data directory.
+	echo '$$HOME/.spring' > debian/spring-engine/etc/spring/datadir
+
+# Build architecture-independent files here.
+binary-indep: build install
+# We have nothing to do by default.
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs -a
+	dh_installdocs -a
+	dh_installman -a
+	dh_install --sourcedir=debian/tmp
+	dh_installmime -a
+	dh_icons -a
+	dh_link -a
+	dh_strip -a
+	dh_compress -a
+	dh_fixperms -a
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

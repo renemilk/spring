@@ -1,0 +1,37 @@
+Source: spring-engine
+Section: games
+Priority: optional
+XSBC-Original-Maintainer: Scott Ritchie <scottritchie@ubuntu.com>
+Maintainer: Scott Ritchie <scottritchie@ubuntu.com>
+Uploaders: Chris Clearwater <chris@detrino.org>
+Build-Depends: debhelper (>= 7.0.0), cmake, libsdl-dev, libopenal-dev, libglew-dev,
+ libboost-dev,
+ libboost-thread-dev,
+ libboost-regex-dev,
+ libboost-serialization-dev,
+ libboost-program-options-dev,
+ libboost-system-dev,
+ libboost-signals-dev,
+ libdevil-dev, libfreetype6-dev, python2.6-dev,
+ bzip2, zip, p7zip-full,
+ libgcj9-dev, libogg-dev, libvorbis-dev, libxcursor-dev, ttf-freefont,
+ default-jdk
+Standards-Version: 3.8.3
+
+Package: spring-engine
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ttf-freefont
+Recommends: springlobby
+Replaces: spring-data
+Conflicts: spring-data
+Homepage: http://springrts.com/
+Description: realtime strategy game
+ Spring is an open source RTS (Real time Strategy) engine originally designed
+ to recreate the experience of Total Annihilation.  Spring now supports many
+ different games ("mods"), including both remakes of the original Total
+ Annihilation and completely new games.
+ .
+ This package contains the game engine and default AI, but no maps, mods,
+ or user interface.
+
+

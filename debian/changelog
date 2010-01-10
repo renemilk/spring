@@ -1,0 +1,485 @@
+spring-engine (0.80.5.2-0ubuntu1~ppa1) karmic; urgency=low
+
+  [ zerver ]
+  * Fix "Give everything to"
+
+  [ hoijui ]
+  * AI: split system dependent/indepentent install parts
+  * AI: properly fix Lua AI loading (mantis #1687)
+  * AI: fix crash when Lua AI team dies (mantis #1697)
+  * AI: Java: change requested by Tobi to be able to use the OOCallback
+    without the OOAIFactory
+  * AI: an other Lua AI initialization fix
+  * AI: comment fixes
+
+  [ zerver ]
+  * Fix deadlock in hang detection
+
+  [ kloot ]
+  * * CommanderScript: don't assume a mod has >= 2 sides
+
+  [ Tobi Vollebregt ]
+  * applied 0001-Fixed-desktop-file-to-freedesktop-standards.patch by
+    mammadori
+  * applied patch 0003-Some-minor-spelling-corrections.patch by
+    mammadori
+  * most ugly commit that fixes segfault during static initialization
+
+  [ kloot ]
+  * * do not reset the up-vector unconditionally (the reflection passes
+    need non-defaults)
+
+  [ Tobi Vollebregt ]
+  * AI: enable debugging by default in ant build scripts
+  * AI: fix clean target in ant build file
+
+  [ hoijui ]
+  * make TimeProfiler number of frames a constant var
+  * heavy touch-up for ProfileDrawer (turns up when you pres 'B' in-
+    game)
+  * unification of timer names
+  * ProfileDrawer size adjustments (due to changed/smaller timer names)
+
+  [ Karl-Robert Ernst ]
+  * move liblobby-testapp to test subdir (ignored by scons)
+
+  [ zerver ]
+  * Allow unofficial builds to play demos even if the version mismatches
+  * Fix loading tile message too long
+  * Fix some warnings (MSVC)
+  * MT: Don't crash if draw callins access features
+  * Update vcproj
+
+  [ kloot ]
+  * KAIK: prevent build-up of huge swarms of idle aircraft
+  * * show an AI's shortName + version + nick in tooltips
+  * scons: compile CLuaAIImplHandler into unitsync
+
+  [ Tobi Vollebregt ]
+  * remove broken SpringApp::InitWindow timer
+
+  [ hoijui ]
+  * AI: E323AI: link to version 2.13.4
+
+  [ zerver ]
+  * Fix possible signed/unsigned mismatch in UDPConnection
+
+  [ hoijui ]
+  * AI: E323AI: some bug fixes
+  * installer: move AI install scripts to a subdir
+  * installer: AI description updates
+  * AI: E323AI: CPU performance improvements and a few bug fixes
+  * print additional info about the running spring to infolog
+  * AI: AAI: copy BA701 config file to BA704
+  * make sure USE_GML_SIM is not used without USE_GML set as well
+  * AI: add longer descriptions to AAI, KAIK and RAI (thanks to R-TEAM)
+
+  [ zerver ]
+  * Fix fading features for ATI
+  * Let atiHacks determine feature shadow fix
+
+  [ kloot ]
+  * KAIK: do not try to reclaim unreachable features
+
+  [ Karl-Robert Ernst ]
+  * fix crash when parsing certain chatmessage from autohost
+
+  [ hoijui ]
+  * AI: Java: fix a compiler warning
+  * do not crash if OSC stats sender is enabled and no network is
+    reachable
+  * CMake: add Find7yip.cmake, and fail if 7zip executable is not
+    installed (fixes mantis #1725)
+
+  [ Tobi Vollebregt ]
+  * Revert "Fix "Give everything to""
+  * Revert "* CommanderScript: don't assume a mod has >= 2 sides"
+  * changelog update
+  * bump to 0.80.5.2
+
+  [ hoijui ]
+  * installer: add E323AI to the installer package
+  * AI: E323AI: pump version
+
+  [ Rene Milk ]
+
+ -- Rene Milk <koshi@springlobby.info>  Sun, 10 Jan 2010 12:25:02 +0100
+
+spring-engine (0.80.5.1-0ubuntu1~ppa1) karmic; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 30 Oct 2009 03:36:01 -0700
+
+spring-engine (0.80.5-0ubuntu2) karmic; urgency=low
+
+  * debian/control: p7zip-full instead of pk7zip-full
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Sun, 25 Oct 2009 22:14:43 -0700
+
+spring-engine (0.80.5-0ubuntu1) karmic; urgency=low
+
+  * New upstream release (LP: #457059)
+    - required to play multiplayer
+    - lots of bugs in the AI interface fixed
+    - fix some network-related problems and improve behaviour under worse conditions
+    - large performance increase for units on patrol
+    - fix some performance problems with the new heatmap pathfinder
+    - fixed a crash which could occur after an AirBase was destroyed
+    - joystick support
+    - some bugs resolved which could lead to crashes when using ogg samples or music
+    - properly handle dds textures
+    - fix some mouse-jumping in windows
+    - lua unit scripts major rework
+    - some sources of desync fixed
+    - fix some compiling problems related to boost 1.40
+    - some fixes for OS X
+  * debian/control:
+    - build-depend on pk7zip-full
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Tue, 20 Oct 2009 20:22:43 -0700
+
+spring-engine (0.80.4.2-0ubuntu1) karmic; urgency=low
+
+  * New upstream release
+    - fix crash when doing lots of mapdrawing (#1632)
+    - fix crash when loading certain cursornormal files
+    - fix drawing of ghosted buildings
+    - properly initialise SDL timer for dedicated server
+    - fixed GatherWait cursor
+    - don't send resign-command when already spectating
+    - fix units with vlaunch missiles (#1647)
+  * Also includes 80.4.1 updates:
+    - Fix missing tree fog, misc fog fixes
+    - fix crash in AI pathing
+    - fix crashes in the Java AI interface
+    - added VFS.MapArchive
+    - fix possible crash on exit
+    - fix crash when loading certain ogg-files
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Mon, 05 Oct 2009 17:50:21 -0700
+
+spring-engine (0.80.4-0ubuntu2) karmic; urgency=low
+
+  * debian/control:
+    - set myself as maintainer
+    - recommend springlobby
+    - build-depend debhelper 7
+    - bump standards version
+    - fix homepage
+  * debian/rules:
+    - remove dh_desktop
+    - replace dh_clean -k with dh_prep
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Mon, 05 Oct 2009 17:35:51 -0700
+
+spring-engine (0.80.4-0ubuntu1) karmic; urgency=low
+
+  * New upstream release
+  * debian/control: 
+    - merge in Chris Clearwater's Jaunty ppa package changes
+    - depend and build-depend on ttf-freefont
+    - build-depend on default-jdk
+  * debian/rules:
+    - commented code to remove embedded font and symlink to system one
+  * debian/copyright:
+    - provide licensing info for rts/lib folder
+    - all other files should be GPL 2
+  * Initial upload to Karmic proper (second try) (LP: #196976)
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Sun, 06 Sep 2009 02:15:57 -0700
+
+spring-engine (0.79.1.2-0ubuntu1) karmic; urgency=low
+
+  * Initial upload to Karmic proper (LP: #196976)
+  * Rename package spring-engine
+  * debian/control: build-dep on generic boost versions and python2.6-dev
+  * set debian/compat to 7
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Sun, 26 Jul 2009 02:22:14 -0700
+
+spring (0.79.1.2-0ubuntu1~9.04~ppa1) jaunty; urgency=low
+
+  * New upstream release
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Fri, 17 Jul 2009 01:25:24 -0700
+
+spring (0.79.1.1-0ubuntu1~9.04~ppa1) jaunty; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Sat, 20 Jun 2009 13:53:25 -0700
+
+spring (0.79.1-0ubuntu1~9.04~ppa1) jaunty; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 29 May 2009 11:29:04 -0700
+
+spring (0.79.0.2-0ubuntu1~9.04~ppa2) jaunty; urgency=low
+
+  * Backport patch for memory allocation bug
+
+ -- Chris Clearwater <chris@detrino.org>  Tue, 26 May 2009 23:29:52 -0700
+
+spring (0.79.0.2-0ubuntu1~9.04~ppa1) jaunty; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 22 May 2009 16:34:42 -0700
+
+spring (0.79.0.1-0ubuntu1~9.04~ppa4) jaunty; urgency=low
+
+  * Fixed missing comma
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 22 May 2009 13:09:49 -0700
+
+spring (0.79.0.1-0ubuntu1~9.04~ppa3) jaunty; urgency=low
+
+  * Added dependency on libdevil-dev
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 22 May 2009 12:49:06 -0700
+
+spring (0.79.0.1-0ubuntu1~9.04~ppa2) jaunty; urgency=low
+
+  * Added dependency on libboost-program-options1.37-dev
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 22 May 2009 12:30:39 -0700
+
+spring (0.79.0.1-0ubuntu1~9.04~ppa1) jaunty; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Fri, 22 May 2009 11:47:58 -0700
+
+spring (0.78.2.1-0ubuntu1~9.04~ppa1) jaunty; urgency=low
+
+  * Port to Jaunty
+    - Switch build depend of libsablevm1-dev to libgcj9-dev
+      - sablevm has been removed from Jaunty
+  * Update debian/copyright to point to GPL and authors
+  * Build with boost 1.37 instead of 1.34
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Thu, 19 Mar 2009 00:06:49 -0700
+
+spring (0.78.2.1-0ubuntu1~8.10~ppa1) intrepid; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Sun, 18 Jan 2009 06:46:16 -0800
+
+spring (0.78.2-0ubuntu1~8.04~ppa1) hardy; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Sat, 17 Jan 2009 13:41:49 -0800
+
+spring (0.78.1.1+fixes-0ubuntu1~8.10~ppa1) intrepid; urgency=low
+
+  * Use lurker's sync preserving bugfix branch
+
+ -- Chris Clearwater <chris@detrino.org>  Wed, 14 Jan 2009 23:49:52 -0800
+
+spring (0.78.1.1-0ubuntu1~ppa1) intrepid; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Mon, 12 Jan 2009 11:37:01 -0800
+
+spring (0.78.1-0ubuntu1~ppa1) intrepid; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Mon, 12 Jan 2009 11:36:41 -0800
+
+spring (0.77b5-0ubuntu1~ppa2) intrepid; urgency=low
+
+  * Bump for intrepid
+
+ -- Chris Clearwater <chris@detrino.org>  Tue, 21 Oct 2008 13:59:45 -0700
+
+spring (0.77b5-0ubuntu1~ppa1) hardy; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Tue, 21 Oct 2008 10:52:43 -0700
+
+spring (0.77b4-0ubuntu1~ppa2) hardy; urgency=low
+
+  * Backported a fix for unitsync compilation
+
+ -- Chris Clearwater <chris@detrino.org>  Tue, 14 Oct 2008 16:46:35 -0700
+
+spring (0.77b4-0ubuntu1~ppa1) hardy; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Tue, 14 Oct 2008 15:27:57 -0700
+
+spring (0.77b3-0ubuntu1~ppa3~intrepid) intrepid; urgency=low
+
+  * Bump for Intrepid
+
+ -- Chris Clearwater <chris@detrino.org>  Sun, 12 Oct 2008 00:51:22 -0700
+
+spring (0.77b3-0ubuntu1~ppa2) hardy; urgency=low
+
+  * Backported a fix for a segfault when using ground decals
+
+ -- Chris Clearwater <chris@detrino.org>  Thu, 09 Oct 2008 18:03:39 -0700
+
+spring (0.77b3-0ubuntu1~ppa1) hardy; urgency=low
+
+  * New upstream release
+
+ -- Chris Clearwater <chris@detrino.org>  Thu, 09 Oct 2008 16:32:16 -0700
+
+spring (0.77b2-0ubuntu1~ppa4) hardy; urgency=low
+
+  * -march=generic doesn't work on out version of GCC, patch source to
+    remove instances of -march
+
+ -- Chris Clearwater <chris@detrino.org>  Thu, 09 Oct 2008 02:31:52 -0700
+
+spring (0.77b2-0ubuntu1~ppa3) hardy; urgency=low
+
+  * Compile with march=generic
+
+ -- Chris Clearwater <chris@detrino.org>  Thu, 09 Oct 2008 01:44:02 -0700
+
+spring (0.77b2-0ubuntu1~ppa2) hardy; urgency=low
+
+  * More verbose build output
+
+ -- Chris Clearwater <chris@detrino.org>  Thu, 09 Oct 2008 01:38:27 -0700
+
+spring (0.77b2-0ubuntu1~ppa1) hardy; urgency=low
+
+  * New upstream version
+  * Convert from debian native to normal package
+  * Make a spring.sharedmimeinfo based on slightly newer upstream spring.xml
+    - the one included in tarball had a slight bug; we ignore it
+  * Split "spring" meta package into a separate spring-meta source
+  * Make a custom spring.desktop with NoDisplay=true
+    - only the lobby should be visible from applications menu
+
+ -- Chris Clearwater <chris@detrino.org>  Wed, 08 Oct 2008 11:36:03 -0700
+
+spring (0.76-b1~2ubuntu7) hardy; urgency=low
+
+  * Add spring-installer to depends
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Sat, 20 Sep 2008 00:23:31 -0700
+
+spring (0.76-b1~1ubuntu6) hardy; urgency=low
+
+  * Use latest (as of May 20 2008) GIT branch of unsynced code
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Tue, 20 May 2008 23:48:12 -0700
+
+spring (0.76-b1~1ubuntu5) hardy; urgency=low
+
+  * Use latest (as of May 8 2008) GIT branch of unsynced code
+    - Many fixes, including lockups/crashes for AI on 64 bit.
+    - Should be compatible with online play with old versions
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Thu, 08 May 2008 17:46:06 -0700
+
+spring (0.76-b1~1ubuntu4) hardy; urgency=low
+
+  * Use latest GIT branch of unsynced code; includes build failure fix
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Wed, 23 Apr 2008 15:37:29 -0700
+
+spring (0.76-b1~1ubuntu3) hardy; urgency=low
+
+  * Use latest GIT branch of unsynced code to fix some crashes
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Tue, 22 Apr 2008 18:32:06 -0700
+
+spring (0.76-b1~1ubuntu2) hardy; urgency=low
+
+  * No changes, simply setting to hardy
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Sun, 06 Apr 2008 00:45:29 -0700
+
+spring (0.76-b1~1ubuntu1) gutsy; urgency=low
+
+  * Add conflicts: spring-data to clear up old version problems
+  * Set myself to maintainer
+  * Hand-patch KAIK to prevent freezing on amd64
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Tue, 19 Feb 2008 04:12:52 -0800
+
+spring (0.76~b1-1) gutsy; urgency=low
+
+  * New upstream release
+  * Spring is now a metapackage - the game engine is now in spring-engine
+  * Remove the .desktop file from spring's install (spring-lobby should be the
+     only desktop file seen).
+  * Add libogg-dev, libvorbis-dev, libboost-serialization-dev to build depends
+  * Change the build depends libsablevm-classlib1-java | libsablevm-native1 to
+     libsablevm1-dev
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Wed, 02 Jan 2008 15:00:41 -0800
+
+spring (0.75~b2-1) feisty; urgency=low
+
+  * New upstream release
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Tue, 24 Jul 2007 15:15:58 -0700
+
+spring (0.75~b1-1) feisty; urgency=low
+
+  * New upstream release
+  * Change python2.4-dev build depend to python2.5-dev
+  * Added libsablevm-classlib1-java | libsablevm-native1 to build depends
+
+ -- Scott Ritchie <scottritchie@ubuntu.com>  Sun, 15 Jul 2007 18:58:58 -0700
+
+spring (0.74~b3-2) unstable; urgency=low
+
+  * Set ~/.spring as r/w data directory (by creating /etc/spring/datadir)
+
+ -- Tobi Vollebregt <tobivollebregt@gmail.com>  Thu, 25 Jan 2007 22:59:03 +0100
+
+spring (0.74~b3-1) unstable; urgency=low
+
+  * New upstream release.
+  * Removed subversion build-dependency.
+  * Removed libboost-filesystem-dev build-dependency.
+  * Removed build-essential build-dependency.
+
+ -- Tobi Vollebregt <tobivollebregt@gmail.com>  Wed, 24 Jan 2007 17:42:46 +0100
+
+spring (0.74~b2-1) unstable; urgency=low
+
+  * New upstream release, first official upload.
+  * Merged Makefile and debian/rules.
+  * Added missing `zip' build-dependency.
+  * Adapted scons configure & install parameters.
+  * Repacked source tarball to get rid of:
+     - *.exe binaries;
+     - *.dll libraries.
+  * TODO: License check, copyright update.
+
+ -- Cyril Brulebois <cyril.brulebois@enst-bretagne.fr>  Fri, 29 Dec 2006 16:53:14 +0100
+
+spring (0.72b1-2+9sid) UNRELEASED; urgency=low
+
+  * Added jcai
+
+ -- fbo <fbo3@gmx.net>  Sun, 18 Jun 2006 12:47:02 +0200
+
+spring (0.72b1-1+9sid) UNRELEASED; urgency=low
+
+  * New upstream release
+
+ -- fbo <fbo3@gmx.net>  Thu, 15 Jun 2006 08:02:47 +0200
+
+spring (0.71b1-1+9sid) UNRELEASED; urgency=low
+
+  * Initial release
+
+ -- fbo <fbo3@gmx.net>  Fri, 02 Jun 2006 09:39:54 +0200
+
