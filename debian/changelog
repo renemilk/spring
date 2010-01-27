@@ -1,3 +1,892 @@
+spring-engine (0.81.1.2-0ubuntu1) karmic; urgency=low
+
+  [ kloot ]
+  * * BumpWater: make the coast-line blur shader not crash when linked
+  * * fix compilation error
+  * * do not reset the up-vector unconditionally (the reflection passes
+    need non-defaults)
+
+  [ Tobi Vollebregt ]
+  * AI: enable debugging by default in ant build scripts
+  * AI: fix clean target in ant build file
+
+  [ hoijui ]
+  * make TimeProfiler number of frames a constant var
+  * heavy touch-up for ProfileDrawer (turns up when you pres 'B' in-
+    game)
+  * unification of timer names
+  * ProfileDrawer size adjustments (due to changed/smaller timer names)
+  * AI: split system dependent/indepentent install parts
+
+  [ Karl-Robert Ernst ]
+  * move liblobby-testapp to test subdir (ignored by scons)
+  * break loose of message spam for host
+  * scripts doesn't need to set map or mod
+  * error out when startscript does nto contain map value
+  * make MapInfo partially available in PReGame
+  * allow maps to override loading pic with smf tag
+  * get some music while loadign spring: Startmusic=...; from mapinfo
+    smd
+
+  [ zerver ]
+  * Allow unofficial builds to play demos even if the version mismatches
+  * Fix Give everything to
+  * Fix loading tile message too long
+
+  [ hoijui ]
+  * AI: fix Lua AI loading/initialization (mantis #1687)
+  * Revert AI: fix Lua AI loading/initialization (mantis #1687)
+  * AI: properly fix Lua AI loading (mantis #1687)
+  * AI: fix crash when Lua AI team dies (mantis #1697)
+  * AI: Java: change requested by Tobi to be able to use the OOCallback
+    without the OOAIFactory
+  * AI: an other Lua AI initialization fix
+  * AI: comment fixes
+
+  [ Tobi Vollebregt ]
+  * refactor: restructure of unit query methods of CGameHelper
+  * Fixed mismatch between CMobileCAI::IsValidTarget and
+    CGameHelper::GetClosestEnemyUnit.
+  * Hold pos shouldn't imply don't turn.
+  * initialize commandPos + hopefully slightly improved behavior on hold
+    pos
+
+  [ kloot ]
+  * * CommanderScript: don't assume a mod has >= 2 sides
+  * KAIK: prevent build-up of huge swarms of idle aircraft
+  * * show an AI's shortName + version + nick in tooltips
+
+  [ Tobi Vollebregt ]
+  * applied 0001-Fixed-desktop-file-to-freedesktop-standards.patch by
+    mammadori
+  * applied patch 0003-Some-minor-spelling-corrections.patch by
+    mammadori
+
+  [ zerver ]
+  * Fix patrolling units not reclaiming some wrecks
+  * Fix deadlock in hang detection
+  * Fix some warnings (MSVC)
+
+  [ kloot ]
+  * scons: compile CLuaAIImplHandler into unitsync
+
+  [ zerver ]
+  * MT: Don't crash if draw callins access features
+  * Update vcproj
+
+  [ Tobi Vollebregt ]
+  * most ugly commit that fixes segfault during static initialization
+  * remove broken SpringApp::InitWindow timer
+
+  [ hoijui ]
+  * AI: E323AI: link to version 2.13.4
+
+  [ zerver ]
+  * Fix possible signed/unsigned mismatch in UDPConnection
+
+  [ hoijui ]
+  * AI: E323AI: some bug fixes
+  * installer: move AI install scripts to a subdir
+  * installer: AI description updates
+  * AI: E323AI: CPU performance improvements and a few bug fixes
+
+  [ zerver ]
+  * Make forced reclaim reclaim also non-autoreclaimable
+
+  [ Tobi Vollebregt ]
+  * fixed retarded behavior of turretless units on Hold pos
+
+  [ hoijui ]
+  * print additional info about the running spring to infolog
+  * AI: AAI: copy BA701 config file to BA704
+  * make additional version info globally available
+  * make sure USE_GML_SIM is not used without USE_GML set as well
+
+  [ kloot ]
+  * * probably fix http://springrts.com/phpbb/viewtopic.php?f=11&t=20953
+
+  [ hoijui ]
+  * AI: add longer descriptions to AAI, KAIK and RAI (thanks to R-TEAM)
+
+  [ zerver ]
+  * Fix fading features for ATI
+  * Let atiHacks determine feature shadow fix
+
+  [ kloot ]
+  * KAIK: do not try to reclaim unreachable features
+
+  [ Karl-Robert Ernst ]
+  * fix crash when parsing certain chatmessage from autohost
+
+  [ Tobi Vollebregt ]
+  * Split directory argument in a part that is included in the returned
+    matches,
+
+  [ hoijui ]
+  * AI: Java: fix a compiler warning
+  * mockup of LuaSyncedRead::GetAIInfo()
+  * make LuaSyncedRead::GetAIInfo() allways return a table of the same
+    size
+  * fix LuaSyncedRead::GetAIInfo()
+  * do not crash if OSC stats sender is enabled and no network is
+    reachable
+
+  [ kloot ]
+  * give LuaSynced limited run-time typemap control
+
+  [ hoijui ]
+  * CMake: add Find7yip.cmake, and fail if 7zip executable is not
+    installed (fixes mantis #1725)
+
+  [ Karl-Robert Ernst ]
+  * changelog update
+
+  [ Tobi Vollebregt ]
+  * changelog update
+
+  [ hoijui ]
+  * installer: add E323AI to the installer package
+  * AI: E323AI: pump version
+  * document font->glPrint() & minor cleanup plus constification in
+    Bitmap
+  * make load-screens preserve their aspect ratio (rest of the screen
+    will be black)
+
+  [ zerver ]
+  * Add simple RAW config file editor
+
+  [ Karl-Robert Ernst ]
+  * server gives a quit-reason when sending netmsg-quit (and netmsg_quit
+    is honored in PreGame now)
+  * forgot to update packet length for new quit message
+  * quick and dirty fix for submodules in the source tarball
+
+  [ hoijui ]
+  * simplify retrieval of the default value of an Option
+  * AI: When an option that is defined in a Skirmish AI's AIOptions.lua
+    is not specified, set its default value
+  * GameHelper docu addition and constification plus minor cleanup
+
+  [ kloot ]
+  * * fix infinite loop in CglFont::WrapTextConsole
+
+  [ hoijui ]
+  * beauti- and constification in far-texture handler
+  * white space fix
+  * constification plus small docu addition (no logic changes except
+    constification)
+  * far texture handler: adds some docu, saved some CPU ops
+
+  [ Karl-Robert Ernst ]
+  * fix crash in QuitBox when player names are longer than normal
+  * trunkate to long system messages
+  * increase system message size limit to 65000
+  * let the server generate the giveawaytextmessage
+  * fix message trunkation
+  * some fixes
+
+  [ zerver ]
+  * Improve list behavior for mouse selection
+
+  [ hoijui ]
+  * make IsReadableFileIs static
+  * AI: only return true on AIVAL_LOCATE_FILE_R if file is found
+  * AI: RAI: fix for file location fetching
+  * get rid of a few warnings
+
+  [ kloot ]
+  * * don't tie a feature's default smokeTime to whether it blocks
+
+  [ hoijui ]
+  * add MAN pages to CMake build on unix (apply mantis #1707 by
+    mammadori)
+
+  [ zerver ]
+  * Adjust list content based on screen res
+  * Don't finish build command if build fails
+
+  [ hoijui ]
+  * installer: changed SL and TASClient descriptions
+
+  [ Tobi Vollebregt ]
+  * Factored new CFeatureDrawer out of CFeatureHandler.
+  * sim: fix crash on area repair order with radius larger than approx
+    4600
+
+  [ hoijui ]
+  * fixes for man-page building
+
+  [ zerver ]
+  * Supposedly some VS2008 fixes (patch by drwho)
+
+  [ kloot ]
+  * * LVM: explicitly refer to the math namespace (in relation to
+    067dae0b74c2462d0bc0d1db2142f471ec554c86)
+
+  [ hoijui ]
+  * fix man-page building (this resolves mantis #1707, credits to
+    mammadori)
+  * CMake: remove test instruction (woops)
+
+  [ zerver ]
+  * Fix 067dae0
+
+  [ hoijui ]
+  * fix compiling on GCC
+  * more Visual Studio related adjustments
+
+  [ -jk- ]
+  * * windows: don't save the window pos when the window is
+    minimized/maximized
+  * split MoveType update in a separate profile timer
+  * default enable (colored) TeamNanoSpray
+  * small tweaks in GroundMoveType & TAAirMoveType
+  * CReadmap cleanup/bugfix:
+  * GroundDecals and Features obey the InfoTex (in particular FogOfWar)
+  * Support s3o transparent mask even with AdvUnitShading disabled
+
+  [ zerver ]
+  * Never include math.h
+  * Display MT info on separate line in HangHandler
+  * Don't assist construction during rez patrol
+  * Adjust rezbar position
+  * By default don't throttle the game speed based on spectators
+  * Minor correction
+  * By default send spectator sync problems as private chat
+  * Use private system message instead of chat
+
+  [ -jk- ]
+  * converted FarTextureHandler to FBO
+  * use sse sqrt
+  * FarTexture sprite size: x4 and not x16
+  * small tweaks in fartexture drawing
+  * fixed Lua::SetFeatureDirection
+  * less casting
+  * fix incorrect rotation
+  * fix typo
+  * made number of FarTexture orientations flexible
+  * some additional gcc const & pure attribute flags in myMath.h
+
+  [ Tobi Vollebregt ]
+  * double underscore is reserved for compiler vendor! fixes compilation
+    on GCC 4.4
+
+  [ kloot ]
+  * * refactor CUnitDrawer::DrawFar and CFeatureDrawer::DrawFar into
+    CFartextureHandler::DrawFarTexture
+
+  [ hoijui ]
+  * fix streflop_cond.h for VS C
+  * add bool defines for Visual Studio C
+  * add missing include
+  * an other try at fixing streflop_cond for VS (credits to slogic)
+  * rework VS bool define for C
+
+  [ zerver ]
+  * Cleanup some tree drawing code
+
+  [ hoijui ]
+  * remove installer generation files from Linux source packages
+  * source packages generation: build .tar.bz2(Linux) and .zip(Windows)
+    by default
+  * source packages generation: have submodule sources in the Windows
+    packages too
+
+  [ Karl-Robert Ernst ]
+  * fix some warnings
+  * remove the nedmalloc
+  * should have paid more attention to line numbers
+  * move default teamcolours from CTAPalette to TeamBase (so dedicated
+    server does not need palette.pal
+  * CGameServer::PushAction doesn't need a lock anymore
+  * tar.gz is needed for buildservices (launchpad cannot read bzip2)
+  * remove unused files from installer/
+  * fix demodumper compilation
+
+  [ zerver ]
+  * Send private delayed sync response messages to spectators
+  * Fix unit interpolation for MT
+  * Broadcast optional warning when game speed is being throttled
+
+  [ Karl-Robert Ernst ]
+  * remove NTAi submodule (readd when there is a working version)
+  * remove legacy null ai
+
+  [ -jk- ]
+  * fix white trees bug
+  * (attempt to) fix crash in lua when using __gc metamethods
+
+  [ tranchis ]
+  * Added assembly to compile in Snow Leopard (64-bit). It should now
+    compile in MacOS X, in any of both 32-bit and 64-bit flavors.
+
+  [ kloot ]
+  * * indentation fixes
+  * * LuaConstGL: expose texture MIP filter control constants
+
+  [ hoijui ]
+  * CrashHandler: white space fixes
+  * add some documentation
+  * include the corresponding header file
+  * allow fetching the log file from logOutput
+  * linux crash handler can use external debug symbols now, and should
+    work for libs to (eg Skirmish AIs)
+  * add missing include (credits to koshi)
+  * minor crash-handler cleanup
+
+  [ -jk- ]
+  * fix z-fighting issue of labels of map markers
+  * fix ships are able to 'climb' cliffs
+  * fix airplanes jumping when being built
+  * don't recreate the stl container each time
+  * fix compilation error in b5fc7c92
+
+  [ kloot ]
+  * patch by SirMaverick -- Add modrule paralyzeOnMaxHealth: determines
+    whether stunning depends on max health or current health.
+
+  [ Tobi Vollebregt ]
+  * typos
+  * fixed SM3 map holes
+
+  [ -jk- ]
+  * fix kamikaze units:
+
+  [ Karl-Robert Ernst ]
+  * Adds PlayerRemoved callin in case a player left the game (by
+    SirMaverick)
+  * print a more usefull error message on relative path error
+
+  [ Tobi Vollebregt ]
+  * fixed /shadows on SM3 maps
+
+  [ Karl-Robert Ernst ]
+  * multithread screenshot creation
+  * make sure all screenshots are saved when exiting
+  * supposedly fix compilation errors for outdated libraries
+  * take #2
+
+  [ zerver ]
+  * Attempt to fix mantis #1719
+
+  [ Karl-Robert Ernst ]
+  * fix possible segfault at exit
+  * remove some legacy code
+  * fix small bug in liblobby
+  * simple bandwidth limitation for network (currently at 64kbyte/s
+
+  [ Marek Baczynski ]
+  * properly detect Windows 7
+
+  [ Tobi Vollebregt ]
+  * sm3: fixed specular lighting (or part of it)
+
+  [ Karl-Robert Ernst ]
+  * save all network traffic until game stert and send it to newcommers
+  * make stuff private
+  * improve mapselect list
+  * Revert Broadcast optional warning when game speed is being throttled
+  * fix bug that players ping wasn't updated when server didn't get a
+    response
+  * now that you can read when player lags from his ping, there is no
+    need for the delayed sync response message any more
+  * No sync response message only trigger skipped, not when it's pending
+    due to lag
+  * correct sync checksum on dedicated = the one which most of the
+    people have
+  * dediserv: fix bug + small memleak
+
+  [ zerver ]
+  * Attempt to fix crash when drawing rez bar
+
+  [ Karl-Robert Ernst ]
+  * quote the script name for execvp (just in case)
+  * fix script filename for execlp
+
+  [ kloot ]
+  * * fix #1763
+
+  [ Karl-Robert Ernst ]
+  * decoupled camera toggle from mousestate event (new event:
+    togglecammode)
+  * attempt to work around broken exec on win32 by quoting
+  * do not link dedicated library to SDL_main
+  * Revert attempt to work around broken exec on win32 by quoting
+
+  [ hoijui ]
+  * AI: minor build system cleanup
+
+  [ Marek Baczynski ]
+  * sim: add a secondary ground mesh for aircraft navigation
+
+  [ Karl-Robert Ernst ]
+  * fix compile error
+
+  [ Marek Baczynski ]
+  * sim: aircraft should remember that ground can be terraformed
+
+  [ Karl-Robert Ernst ]
+  * impürove some headers
+  * reimplement CUnitSet with less code
+  * remove some unusefull messages
+  * increase max mouse button to 10, unhardcode 4 and 5 to buildspacing
+  * should fix startposition reading from script
+
+  [ -jk- ]
+  * glFont: fix bug when splitting words
+
+  [ Karl-Robert Ernst ]
+  * give demos a better name
+
+  [ Marek Baczynski ]
+  * sim: add useSmoothMesh tag (for airplanes)
+
+  [ zerver ]
+  * Fix deadlock in grouphandler
+
+  [ Marek Baczynski ]
+  * lua: add GetUnitMoveTypeData(unitID) callin, returns a table
+
+  [ Karl-Robert Ernst ]
+  * update springlobby_download.sh to install all dlls
+
+  [ zerver ]
+  * Fix small bug in HangHandler
+
+  [ Karl-Robert Ernst ]
+  * update SL download location
+  * fix startpositions
+  * change default bind of forcestart to Alt+f
+  * singlestep: Alt+o, Debug: Alt+b
+
+  [ zerver ]
+  * Temp. fix for crash on alt-tab
+  * Fix compile errors
+  * Mutex cleanup
+
+  [ Marek Baczynski ]
+  * lua: add Spring.MoveCtrl.SetAirMoveTypeData - a callin that can
+    change AirMoveType values
+
+  [ Karl-Robert Ernst ]
+  * fix overiew camera going out to far on widescreen displays
+  * make stuff use gu->aspectRation instad of calculating their own
+  * partially revert Joystick control for FPSCamera until someone finds
+    a better way to do it
+
+  [ hoijui ]
+  * cmake: fix a problem with engine built-in paths when cross-compiling
+  * cmake: make sure all engine built-in data-dir paths are absolute
+  * Revert cmake: make sure all engine built-in data-dir paths are
+    absolute
+  * cmake: make sure all engine built-in data-dir paths are absolute
+
+  [ Karl-Robert Ernst ]
+  * prevent SmoothCamera from going underground
+  * remove quicktime loading code
+
+  [ Marek Baczynski ]
+  * lua: add SetGroundMoveTypeData, similar to SetAirMoveTypeData
+
+  [ kloot ]
+  * * UnitRenderer: refactor reflection/specular cubemap generation into
+    its own class
+
+  [ Karl-Robert Ernst ]
+  * store CFeature*s in a vector
+
+  [ hoijui ]
+  * CMake: add PATH_DELIM_H again
+  * AI: HughAI: bug fixes, Option fixes and CMake adjustments
+
+  [ Karl-Robert Ernst ]
+  * randomize new feature ids a bit
+
+  [ zerver ]
+  * Fix MSVC compile errors
+
+  [ hoijui ]
+  * only update the heightmap if the affected area has a size > 0
+    (credits to MadrMan)
+
+  [ Marek Baczynski ]
+  * lua: add support for modifying CTAAirMoveType (gunships)
+  * lua: return more data about gunship movetype
+
+  [ hoijui ]
+  * CMake: make lobby lib explicitly static
+
+  [ Marek Baczynski ]
+  * sim: gunships can use smooth mesh now. useSmoothMesh=0 to disable.
+  * sim: a hovering gunship with land enabled will now land if told to
+    stop
+
+  [ zerver ]
+  * Fix restored terrain burying wreckages again
+  * Make sure all commanders wear a suitable x-mas hat
+
+  [ hoijui ]
+  * AI: KAIK: convert line endings to unix style
+  * AI: KAIK: non-functional changes by slogic
+  * AI: KAIK: fix a bug when compiled on MSVC (by slogic)
+  * AI: KAIK: better D-Gun handling (by slogic)
+  * AI: KAIK: avoid taking a decision to build a MEx near allied MEx (by
+    slogic)
+  * AI: KAIK: float range fix for MSVC (by slogic)
+  * AI: KAIK: using compiler supplied values for float ranges
+  * white space fixes, duplication removed, deprecated comment removed
+  * add missing type to C AI Interface version
+  * AI: KAIK: white-space fixes
+  * AI: RAI: white-space fixes
+  * AI: AAI: white-space fixes
+  * AI: NullAI: white-space fixes
+
+  [ Marek Baczynski ]
+  * lua: really change maxSpeed when setting it in the move type
+  * lua: changing maxSpeed on a gunship also changes brake distance
+  * lua: fix movetype speed inconsistency (was elmo/frame, is elmo/s)
+  * sim: ground move type now looks at owner->maxSpeed instead of
+    unitdef
+  * sim: rename TAAirMoveType breakDistance to brakeDistance
+  * sim: add CUnit::maxReverseSpeed to creg
+  * sim: remove hardcoded collision treatment for mass==100000
+  * sim: reduce impules every frame, not every slow update
+  * sim: do not conserve momentum in unit-unit collisions
+  * add qtcreator debugging support on windows
+
+  [ Tobi Vollebregt ]
+  * lua: updated gadgetHandler with AllowFeatureBuildStep
+
+  [ Rene Milk ]
+  * added mailmap file
+
+  [ Tobi Vollebregt ]
+  * call right method to display start picture
+  * fixed CGameServer::PostLoad
+
+  [ zerver ]
+  * Attempt to fix a GCC memory alignment crashbug
+  * Fix memcpy undefined with some GCC version
+
+  [ Karl-Robert Ernst ]
+  * map draw patch by beherith
+
+  [ Tobi Vollebregt ]
+  * remove debugging code in Beherith's patch
+  * add load message for when calculating smooth height mesh
+
+  [ Karl-Robert Ernst ]
+  * make DemoReader use fstream instead of CFileHandler
+  * DemoReader reads player stats
+  * also read teamstats
+  * new demotool replaces demoanalyser and demoreader
+  * only load stats on demand (not needed for regular watching)
+  * include demotool in source tarball
+  * could as well export teamstats to csv file
+  * small improvement
+  * compile++
+
+  [ zerver ]
+  * Enable GML debugging by default
+
+  [ -jk- ]
+  * fix typo in gamedata/explosions.lua
+  * remove redundant warning message
+  * add comment
+  * fix incorrent argument check
+  * finally fix crash in glFont::AddEllipsis
+
+  [ Karl-Robert Ernst ]
+  * air transporter cannot use smooth mesh while loading / unloading
+    units (fixes #1779)
+
+  [ -jk- ]
+  * fix a possible deadloop in glFont::WordWrap
+
+  [ kloot ]
+  * * UnitRenderer: abstract model shader handling
+  * s/mdlShaGenShader/MDLLSPShader
+  * * ShaderHandler: store programs by category
+  * * commentify
+
+  [ Karl-Robert Ernst ]
+  * unbreak building
+
+  [ -jk- ]
+  * another fix in glFont::WordWrap
+  * remove unused headers in Shaders.cpp
+  * and another fix in glFont::WordWrap
+
+  [ Tobi Vollebregt ]
+  * Added CPU detection code for MSVC
+
+  [ -jk- ]
+  * typo in weaponDefs.lua
+
+  [ zerver ]
+  * Add some GL functions to GML
+  * Fix CPU detection code for MSVC
+
+  [ Tobi Vollebregt ]
+  * fix typo in gamedata/featuredefs.lua
+
+  [ -jk- ]
+  * added new Shadows=2 (or '/shadows 2'): it disables terrain rendering
+    in the shadow pass, which gives a huge performance increase
+  * BumpWater: changed BumpWaterReflection possible values:  0 =
+    disable; 1 = enable (no terrain); 2 = enable (with terrain - was '1'
+    before)
+
+  [ Karl-Robert Ernst ]
+  * allow connecting to lobby server
+  * usability
+  * some liblobby improvements
+  * handle the aggreement
+  * can weight ui elements in layout
+  * move the default menu code to Menu/ because it doesn'T fit anywhere
+    else
+  * gracefull error if tasserver disconnected us
+  * ping every 30 seconds
+
+  [ zerver ]
+  * Use STREFLOP_SSE for VS8 build
+
+  [ Karl-Robert Ernst ]
+  * fix pregame menu for dual screen (by stephenashelton)
+  * display the agreement
+  * simple richtext parser
+  * seperate connection from the connectwindow
+  * server address from config file
+  * allow building without SSE flags, but give a warning (probably
+    should do something to prevent online play)
+  * seperate FileSystemHandler into its own file
+
+  [ zerver ]
+  * Fix mantis #1712 (some projectiles not getting drawn)
+  * Fix MSVC compile errors
+
+  [ Karl-Robert Ernst ]
+  * moved archive scanner initialisation to its constructor
+  * real fix for the compile error
+  * didn't want to remvoe that
+  * some minor improvements
+  * add missing return and use new function also from dediserv
+  * remove scanning messages for nonexistent dirs
+
+  [ Marek Baczynski ]
+  * lua: expose smooth mesh to lua
+  * decrease resolution of the smooth mesh for much faster game start
+  * smooth mesh: remove debug log output
+  * allow overhead and smooth cameras to use smooth height mesh
+
+  [ Karl-Robert Ernst ]
+  * improve handling of spectators
+  * one playerleft message is enought
+
+  [ hoijui ]
+  * white-space fixes
+  * If atioglxx.dll is in the stack trace, suggest upgrading/downgrading
+    the graphic driver
+  * Win CrashHandler formatting unification & white space fix (no code
+    logic changes)
+  * E323AI: bump to v3.13.1
+  * If libGLcore.so is in the stack trace, suggest upgrading/downgrading
+    the graphic driver
+  * print a warning to infolog for crappy graphic cards for release
+    builds
+  * issue a warning for intel GMA 900 & 950 graphic cards
+  * check if minimal required OpenGL version (1.4) is met
+  * Revert check if minimal required OpenGL version (1.4) is met
+  * check if minimal required OpenGL version (1.4) is met (fixed)
+
+  [ zerver ]
+  * Clarify GML license as per request
+
+  [ Karl-Robert Ernst ]
+  * unitsync: use SmfMapFile to read minimap
+  * bump pathestimater version to trigger repathing
+  * Revert allow overhead and smooth cameras to use smooth height mesh
+
+  [ Tobi Vollebregt ]
+  * comment update
+  * send startpositions for teams not controlled by any player. fixes
+    all startPosType != 2 in skirmish games.
+
+  [ Karl-Robert Ernst ]
+  * fix spaces in string path restart (at least in wine)
+  * do the same for lobby and settings start
+  * fix possible crash (thanks Vantskruv)
+  * fix wind not goind below maps min
+  * set wind to minimal strength on startup instead of 0
+  * archive scanner: don't silently drop unresolved dependencies
+  * layout fix in ArchiveBuffered
+  * don't buffer files for 7z archives twice
+
+  [ Tobi Vollebregt ]
+  * simplification, function naming
+  * fix compiler error when USE_MMGR=YES
+
+  [ hoijui ]
+  * fix windows DirExists(dir); now works for root dir of drives too
+    (eg: C:\)
+
+  [ Karl-Robert Ernst ]
+  * misc
+  * fix reading over bounds in DemoReader (crash at the end of demo)
+  * dediserv: fix problem loading map
+  * make valgrind happy by initialising playerstatistics
+  * make it even more happy
+
+  [ hoijui ]
+  * CategoryHandler: code cleanup & warning message fix & documentation
+
+  [ Karl-Robert Ernst ]
+  * changelog
+
+  [ Tobi Vollebregt ]
+  * ui: strip path & extension from demo name in info box, so it fits on
+    screen
+  * vfs: small simplification
+  * sim: a feature's reclaimTime must be >= 1 (fixes division by zero +
+    NaN m/e when reclaiming)
+
+  [ hoijui ]
+  * changelog updates
+  * AI test script minimal cleanup
+
+  [ Tobi Vollebregt ]
+  * rendering: fixed icons not working properly when distance to ground
+    was used
+  * ui: fixed /wiremap 0|1  (was inversed)
+
+  [ hoijui ]
+  * CMake: find docbook.xml in gentoo
+
+  [ Tobi Vollebregt ]
+  * sim: don't consider features that can't be seen in TestBuildSquare
+    (fixes mantis #1797)
+  * sim: consider visible non-reclaimable features fully blocking in
+    TestBuildSquare
+  * sim: builder now reclaims features which are new for it since the
+    start of a build command
+  * changelog update
+  * changelog update
+
+  [ -jk- ]
+  * changelog updates
+
+  [ Tobi Vollebregt ]
+  * version bump to 0.81.0
+  * post-release version bump
+
+  [ zerver ]
+  * Add speed display, improve basic player list
+
+  [ hoijui ]
+  * DataDirLocator doc fixes (no code-logic changes)
+  * error-handler cleanup & doc additions
+  * show a pop up message instead of doing a simple exit() if OpenGL <
+    1.4
+  * KAIK: docu addition
+
+  [ Tobi Vollebregt ]
+  * Fixed map options
+  * Fixed random/fixed start positions
+
+  [ hoijui ]
+  * do not add useless/unspecified dir to data-dirs
+
+  [ Karl-Robert Ernst ]
+  * create unitsync.log in writable datadir instead in $HOME
+
+  [ -jk- ]
+  * fixed unit in built rendering
+  * lua: less strict type checking in VFS.DirList (fixes an issue in
+    FBI2Lua converter)
+
+  [ Karl-Robert Ernst ]
+  * fix assertion when unitsync init is called a second time
+
+  [ hoijui ]
+  * windows crash-handler: give GFX card driver warning/tip for NVIDIA
+    cards too
+  * add a platform independent path delimitter C-string and char define
+  * DataDirLocater: get rid of some #ifdefs
+  * BaseGroundDrawer: minor refactor, still using the smae logic
+  * BaseGroundDrawer: less multiplications (move them out of loops)
+  * BaseGroundDrawer: draw a dark red overlay on /drawpathmap if we have
+    no path to draw
+
+  [ zerver ]
+  * Format basic player list as table
+
+  [ kloot ]
+  * * update E323AI to 72033fbcb98a75dea703729ff7951a22706ddf0a
+
+  [ Karl-Robert Ernst ]
+  * fix wrong function call in UpdaterWindow
+
+  [ Tobi Vollebregt ]
+  * do not crash the menu if there are no mods / maps found
+
+  [ hoijui ]
+  * LogOutput: move doxygen doc from .cpp to .h
+  * LogOutput: change filename from char* to std::string
+  * ConfigHandler: Initialize(): add default value
+  * fix compilation on GCC 4.4.3 (credits to abompard)
+  * FileSystemHandler: make mkdir() and Chdir() static
+  * FileSystemHandler: add GetFileModificationDate(file)
+  * FileSystemHandler: add GetCwd()
+  * LogOutput: allow fetching the absolute path of the log file, and use
+    it internally
+  * LogOutput: implement simple log rotation
+  * LogOutput: fixes
+  * FileSystemHandler: fix windows compilation
+  * FileSystemHandler: an other try to fix for windows
+
+  [ MadrMan ]
+  * compile fix for vs, forgot boost::
+
+  [ hoijui ]
+  * E323AI: pumb to current master HEAD
+
+  [ Tobi Vollebregt ]
+  * fix: take terrain types and water damage into account for path
+    finder checksum
+  * remove unused functions
+  * Fixed canceling first build item when buildiconsfirst is toggled.
+    (mantis #1674)
+  * Fixed placing building near other buildings often fails (mantis
+    #1801)
+
+  [ Dmytry Lavrov ]
+  * Changed builder patrol/fight behaviour for Hold Pos and Maneuver
+    movestates.
+
+  [ Tobi Vollebregt ]
+  * fixed installer generation
+
+  [ kloot ]
+  * * make being-built units visible on radar by default (#1627)
+  * * fix syntax
+
+  [ Tobi Vollebregt ]
+  * removed TASClient from installer, it's now on dl page (+ some small
+    cleanups)
+  * changelog update
+  * bumped version to 0.81.1
+  * post release version bump
+  * don't overwrite OpenAL32.dll when generating installer
+  * Revert post release version bump
+  * post release version bump
+  * Revert post release version bump
+  * bumped version to 0.81.1.2
+
+  [ Rene Milk ]
+  * debian files from buntu package + 0.80.5.2 changelog
+
+ -- Rene Milk <koshi@springlobby.info>  Wed, 27 Jan 2010 21:57:58 +0100
+
 spring-engine (0.80.5.2-0ubuntu1~ppa1) karmic; urgency=low
 
   [ zerver ]
