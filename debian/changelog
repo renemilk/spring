@@ -1,3 +1,74 @@
+spring-engine (0.81.1.3-0ubuntu1) karmic; urgency=low
+
+  [ Tobi Vollebregt ]
+  * post release version bump
+
+  [ Rene Milk ]
+  * debian files from buntu package + 0.80.5.2 changelog
+  * 0.81.1.2 changelog
+
+  [ Tobi Vollebregt ]
+  * Fix: Automatically assigning start pos if none is chosen now works.
+
+  [ Karl-Robert Ernst ]
+  * exclude .git dir from source tarball + generation speedup
+
+  [ -jk- ]
+  * fixed bug in DXT5 AlphaBlock-flip-code
+
+  [ hoijui ]
+  * KAIK: fix for: do not use metal spots already taken (by slogic)
+  * KAIK: fixed a crash with insufficient buffer length if compiled with
+    MSVC2008 (by slogic)
+  * KAIK: fix CMake script line endings (now uses UNIX style)
+
+  [ Tobi Vollebregt ]
+  * fixed UMR in DemoReader
+  * don't continue running method of deleted object
+  * fixed mismatched free() / delete / delete []
+
+  [ hoijui ]
+  * changelog update: E323AI & KAIK
+  * fix height-map drawing (credits go to jk, bug caused by hoijui)
+
+  [ Tobi Vollebregt ]
+  * fix possibility that GameSetupDrawer refuses to disable
+  * silence valgrind (false positive, I think)
+  * Fixed demo replay for demos not properly closed (i.e. Spring
+    crashed)
+  * fixed compile error with gcc 4.2
+
+  [ Karl-Robert Ernst ]
+  * make spectator-drawings white instead of semi-random teamcolour
+    (matches playerlist color)
+
+  [ hoijui ]
+  * AI: Wrappers: Legacy C++: fix compilation
+
+  [ Karl-Robert Ernst ]
+  * disable recording demos from demos (DemoFromDemo in springrc)
+
+  [ Andrea Piras ]
+  * added a mechanism to register/unregister for messages that are
+    normally not broadcasted
+  * fixed logic and removed pointless copies in gameserver.cpp
+  * fixed typo in gameserver.cpp
+
+  [ Tobi Vollebregt ]
+  * some code still assumes array has room for at least 1000 quads...
+  * changelog update
+
+  [ Andrea Piras ]
+  * fixed data size ( forgotten cast )
+  * register types in cbasenetprotocol
+
+  [ Tobi Vollebregt ]
+  * bumped version to 0.81.1.3
+
+  [ Rene Milk ]
+
+ -- Rene Milk <koshi@springlobby.info>  Sun, 31 Jan 2010 19:23:48 +0100
+
 spring-engine (0.81.1.2-0ubuntu1) karmic; urgency=low
 
   [ kloot ]
