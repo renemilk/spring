@@ -1,3 +1,4 @@
+#!/bin/bash
 set -e
 cd $(dirname $0)/..
 
@@ -15,12 +16,16 @@ echo "!define BUILD_DIR \"${BUILDDIR}\"" >> installer/custom_defines.nsi
 
 
 #strip symbols and archive them
-for tostripfile in spring.exe unitsync.dll ; do
+cd ${BUILDDIR}
+for tostripfile in spring.exe unitsync.dll $(find AI/Skirmish -name SkirmishAI.dll); do
+	echo ${tostripfile}
 	debugfile=${tostripfile}.dbg
-	${MINGW_HOST}objcopy --only-keep-debug ${BUILDDIR}/${tostripfile} ${BUILDDIR}/${debugfile}
-	${MINGW_HOST}strip --strip-debug --strip-unneeded ${BUILDDIR}/${tostripfile}
-	${MINGW_HOST}objcopy --add-gnu-debuglink=${BUILDDIR}/${debugfile} ${BUILDDIR}/${tostripfile}
+	${MINGW_HOST}objcopy --only-keep-debug ${tostripfile} ${debugfile}
+	${MINGW_HOST}strip --strip-debug --strip-unneeded ${tostripfile}
+	${MINGW_HOST}objcopy --add-gnu-debuglink=${debugfile} ${tostripfile}
 done
+
+cd $OLDPWD
 
 ./installer/make_installer.pl
 
