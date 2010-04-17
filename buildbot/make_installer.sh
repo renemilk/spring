@@ -4,7 +4,7 @@ cd $(dirname $0)/..
 CONFIG=${1}
 BRANCH=${2}
 MINGWLIBS_PATH=${3}
-MINGW_HOST=i586-pc-mingw32-
+MINGW_HOST=/opt/mingw32/bin/i586-pc-mingw32-
 BUILDDIR=${PWD}/build-${CONFIG}
 TMP_BASE=/tmp/sl
 TMP_PATH=${TMP_BASE}/${CONFIG}/${BRANCH}
