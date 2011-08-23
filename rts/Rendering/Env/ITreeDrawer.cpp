@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ITreeDrawer.h"
 #include "BasicTreeDrawer.h"
@@ -11,17 +10,24 @@
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Features/Feature.h"
 #include "Sim/Misc/GlobalConstants.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/Exceptions.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/myMath.h"
 
+CONFIG(int, TreeRadius)
+	.defaultValue((int) (5.5f * 256))
+	.minimumValue(0);
+
+CONFIG(bool, 3DTrees).defaultValue(true);
+
 ITreeDrawer* treeDrawer = NULL;
+
 
 ITreeDrawer::ITreeDrawer()
 	: drawTrees(true)
 {
-	baseTreeDistance = configHandler->Get("TreeRadius", (unsigned int) (5.5f * 256)) / 256.0f;
+	baseTreeDistance = configHandler->GetInt("TreeRadius") / 256.0f;
 }
 
 ITreeDrawer::~ITreeDrawer() {
@@ -50,14 +56,14 @@ ITreeDrawer* ITreeDrawer::GetTreeDrawer()
 	ITreeDrawer* td = NULL;
 
 	try {
-		if (configHandler->Get("3DTrees", 1)) {
+		if (configHandler->GetBool("3DTrees")) {
 			td = new CAdvTreeDrawer();
 		}
-	} catch (content_error& e) {
+	} catch (const content_error& e) {
 		if (e.what()[0] != '\0') {
-			logOutput.Print("Error: %s", e.what());
+			LOG_L(L_ERROR, "%s", e.what());
 		}
-		logOutput.Print("TreeDrawer: Fallback to BasicTreeDrawer.");
+		LOG("TreeDrawer: Fallback to BasicTreeDrawer.");
 		// td can not be != NULL here
 		//delete td;
 	}

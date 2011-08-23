@@ -14,7 +14,7 @@
 #include <boost/thread/thread.hpp>
 #include <boost/thread/recursive_mutex.hpp>
 
-#include "float3.h"
+#include "System/float3.h"
 
 #include "SoundItem.h"
 
@@ -30,7 +30,7 @@ public:
 	CSound();
 	virtual ~CSound();
 
-	virtual bool HasSoundItem(const std::string& name);
+	virtual bool HasSoundItem(const std::string& name) const;
 	virtual size_t GetSoundId(const std::string& name, bool hardFail = true);
 	SoundItem* GetSoundItem(size_t id) const;
 

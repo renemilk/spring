@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "MoveMath.h"
 #include "Map/ReadMap.h"
 #include "Map/MapInfo.h"
@@ -8,8 +7,7 @@
 #include "Sim/Misc/GroundBlockingObjectMap.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
-#include "LogOutput.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 CR_BIND_INTERFACE(CMoveMath);
 
@@ -28,10 +26,10 @@ float CMoveMath::GetPosSpeedMod(const MoveData& moveData, int xSquare, int zSqua
 	}
 
 	const int square = (xSquare >> 1) + ((zSquare >> 1) * gs->hmapx);
-	const int squareTerrType = readmap->typemap[square];
+	const int squareTerrType = readmap->GetTypeMapSynced()[square];
 
-	const float height  = readmap->mipHeightmap[1][square];
-	const float slope   = readmap->slopemap[square];
+	const float height  = readmap->GetMIPHeightMapSynced(1)[square];
+	const float slope   = readmap->GetSlopeMapSynced()[square];
 
 	const CMapInfo::TerrainType& tt = mapInfo->terrainTypes[squareTerrType];
 
@@ -51,15 +49,15 @@ float CMoveMath::GetPosSpeedMod(const MoveData& moveData, int xSquare, int zSqua
 		return 0.0f;
 	}
 
-	const int square         = (xSquare >> 1) + ((zSquare >> 1) * gs->hmapx);
-	const int squareTerrType = readmap->typemap[square];
+	const int square = (xSquare >> 1) + ((zSquare >> 1) * gs->hmapx);
+	const int squareTerrType = readmap->GetTypeMapSynced()[square];
 
-	const float height  = readmap->mipHeightmap[1][square];
-	const float slope   = readmap->slopemap[square];
+	const float height  = readmap->GetMIPHeightMapSynced(1)[square];
+	const float slope   = readmap->GetSlopeMapSynced()[square];
 
 	const CMapInfo::TerrainType& tt = mapInfo->terrainTypes[squareTerrType];
 
-	float3 flatNorm = readmap->centernormals[xSquare + zSquare * gs->mapx];
+	float3 flatNorm = readmap->GetCenterNormalsSynced()[xSquare + zSquare * gs->mapx];
 		flatNorm.y = 0.0f;
 		flatNorm.SafeNormalize();
 
@@ -87,8 +85,8 @@ int CMoveMath::IsBlocked(const MoveData& moveData, const float3& pos) const
 /* Check if a given square-position is accessable by the movedata footprint. */
 int CMoveMath::IsBlocked(const MoveData& moveData, int xSquare, int zSquare) const
 {
-	if (CMoveMath::GetPosSpeedMod(moveData, xSquare, zSquare) == 0.0f) {
-		return 1;
+	if (GetPosSpeedMod(moveData, xSquare, zSquare) == 0.0f) {
+		return BLOCK_IMPASSABLE;
 	}
 
 	int ret = 0;
@@ -122,7 +120,7 @@ int CMoveMath::IsBlocked(const MoveData& moveData, int xSquare, int zSquare) con
  * objects block iif their mass exceeds the movedata's crush-strength).
  * NOTE: modify for selective blocking
  */
-bool CMoveMath::CrushResistant(const MoveData& moveData, const CSolidObject* object) const
+bool CMoveMath::CrushResistant(const MoveData& moveData, const CSolidObject* object)
 {
 	if (!object->blocking) { return false; }
 	if (dynamic_cast<const CFeature*>(object) == NULL) { return true; }
@@ -134,7 +132,7 @@ bool CMoveMath::CrushResistant(const MoveData& moveData, const CSolidObject* obj
  * check if an object is NON-blocking for a given MoveData
  * (ex. a submarine's moveDef vs. a surface ship object)
  */
-bool CMoveMath::IsNonBlocking(const MoveData& moveData, const CSolidObject* obstacle) const
+bool CMoveMath::IsNonBlocking(const MoveData& moveData, const CSolidObject* obstacle)
 {
 	if (!obstacle->blocking) {
 		return true;
@@ -145,7 +143,7 @@ bool CMoveMath::IsNonBlocking(const MoveData& moveData, const CSolidObject* obst
 	const int hx = int(obstacle->pos.x / SQUARE_SIZE);
 	const int hz = int(obstacle->pos.z / SQUARE_SIZE);
 	const int hi = (hx >> 1) + (hz >> 1) * gs->hmapx;
-	const int hj = (gs->mapx >> 1) * (gs->mapy >> 1); // sizeof(mipHeightmap[1])
+	const int hj = (gs->mapx >> 1) * (gs->mapy >> 1); // sizeof(GetMIPHeightMapSynced(1))
 
 	if (hi < 0 || hi >= hj) {
 		// unit is out of map bounds, so cannot be blocked
@@ -159,8 +157,8 @@ bool CMoveMath::IsNonBlocking(const MoveData& moveData, const CSolidObject* obst
 		// note: in many cases separation is not sufficient
 		// even when it logically should be (submarines vs.
 		// floating DT in shallow water)
-		const float elevDif = streflop::fabs(unit->pos.y - obstacle->pos.y);
-		const float hghtSum = streflop::fabs(unit->height) + streflop::fabs(obstacle->height);
+		const float elevDif = math::fabs(unit->pos.y - obstacle->pos.y);
+		const float hghtSum = math::fabs(unit->height) + math::fabs(obstacle->height);
 
 		if ((elevDif - hghtSum) >= 1.0f) { return true;  }
 		if ( elevDif            <= 1.0f) { return false; }
@@ -181,7 +179,7 @@ bool CMoveMath::IsNonBlocking(const MoveData& moveData, const CSolidObject* obst
 	// as non-blocking
 	const float oy = obstacle->pos.y;
 	const float oh = std::max(obstacle->height, -obstacle->height);
-	const float gy = readmap->mipHeightmap[1][hi];
+	const float gy = readmap->GetMIPHeightMapSynced(1)[hi];
 
 	// remaining conditions under which obstacle does NOT block unit
 	//   1.
@@ -216,17 +214,17 @@ bool CMoveMath::IsNonBlocking(const MoveData& moveData, const CSolidObject* obst
 
 
 /* Check if a single square is accessable (for any object which uses the given movedata). */
-int CMoveMath::SquareIsBlocked(const MoveData& moveData, int xSquare, int zSquare) const
+int CMoveMath::SquareIsBlocked(const MoveData& moveData, int xSquare, int zSquare)
 {
 	// bounds-check
 	if (xSquare < 0 || zSquare < 0 || xSquare >= gs->mapx || zSquare >= gs->mapy) {
-		return 1;
+		return BLOCK_IMPASSABLE;
 	}
 
 	int r = 0;
 	const BlockingMapCell& c = groundBlockingObjectMap->GetCell(xSquare + zSquare * gs->mapx);
 
-	for (BlockingMapCellIt it = c.begin(); it != c.end(); it++) {
+	for (BlockingMapCellIt it = c.begin(); it != c.end(); ++it) {
 		CSolidObject* obstacle = it->second;
 
 		if (IsNonBlocking(moveData, obstacle)) {

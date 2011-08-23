@@ -9,7 +9,7 @@
 #include "Sim/Misc/CommonDefHandler.h"
 #include "Sim/Misc/GuiSoundSet.h"
 #include "WeaponDef.h"
-#include "float3.h"
+#include "System/float3.h"
 
 class LuaTable;
 
@@ -38,12 +38,6 @@ private:
 	float3 hs2rgb(float h, float s);
 };
 
-
-//not very sweet, but still better than replacing "const WeaponDef" _everywhere_
-inline S3DModel* LoadModel(const WeaponDef* wdef)
-{
-	return const_cast<WeaponDef*>(wdef)->LoadModel();
-}
 
 
 extern CWeaponDefHandler* weaponDefHandler;

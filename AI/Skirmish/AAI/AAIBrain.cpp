@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------
 // AAI
 //
-// A skirmish AI for the TA Spring engine.
+// A skirmish AI for the Spring engine.
 // Copyright Alexander Seizinger
 //
 // Released under GPL license: see LICENSE.html for more information.
@@ -230,7 +230,7 @@ bool AAIBrain::EnergyForConstr(int unit, int wokertime)
 	}
 
 	// check energy
-	int energy =  bt->unitList[unit-1]->buildTime * (cb->GetEnergyIncome()-(cb->GetEnergyUsage()/2));
+//	int energy =  bt->unitList[unit-1]->buildTime * (cb->GetEnergyIncome()-(cb->GetEnergyUsage()/2));
 
 	// TODO: FIXME: add code here
 
@@ -293,7 +293,7 @@ void AAIBrain::RemoveSector(AAISector *sector)
 
 void AAIBrain::DefendCommander(int attacker)
 {
-	float3 pos = cb->GetUnitPos(ai->ut->cmdr);
+//	float3 pos = cb->GetUnitPos(ai->ut->cmdr);
 	//float importance = 120;
 	Command c;
 

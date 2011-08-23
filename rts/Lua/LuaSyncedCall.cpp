@@ -1,12 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
-
-#include <set>
-#include <list>
-#include <cctype>
-using namespace std;
+#include "System/mmgr.h"
 
 #include "LuaSyncedCall.h"
 
@@ -18,7 +12,10 @@ using namespace std;
 #include "LuaRules.h"
 #include "LuaHashString.h"
 #include "LuaUtils.h"
-#include "LogOutput.h"
+
+#include <set>
+#include <list>
+#include <cctype>
 
 
 /******************************************************************************/

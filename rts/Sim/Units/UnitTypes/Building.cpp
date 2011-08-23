@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Building.h"
 #include "Game/GameHelper.h"
@@ -50,7 +49,7 @@ void CBuilding::PostInit(const CUnit* builder)
 
 void CBuilding::ForcedMove(const float3& newPos, int facing) {
 	buildFacing = facing;
-	pos = helper->Pos2BuildPos(BuildInfo(unitDef, newPos, buildFacing));
+	pos = helper->Pos2BuildPos(BuildInfo(unitDef, newPos, buildFacing), true);
 	speed = ZeroVector;
 	heading = GetHeadingFromFacing(buildFacing);
 	frontdir = GetVectorFromHeading(heading);

@@ -1,27 +1,32 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "FPSController.h"
 
-#include "ConfigHandler.h"
 #include "Game/Camera.h"
-#include "LogOutput.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/Ground.h"
-#include "GlobalUnsynced.h"
-#include "myMath.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
+#include "System/myMath.h"
 
 using std::min;
 using std::max;
 
+CONFIG(int, FPSScrollSpeed).defaultValue(10);
+CONFIG(float, FPSMouseScale).defaultValue(0.01f);
+CONFIG(bool, FPSEnabled).defaultValue(true);
+CONFIG(float, FPSFOV).defaultValue(45.0f);
+
+
 CFPSController::CFPSController()
 	: oldHeight(300)
 {
-	scrollSpeed = configHandler->Get("FPSScrollSpeed", 10) * 0.1f;
-	mouseScale = configHandler->Get("FPSMouseScale", 0.01f);
-	enabled = !!configHandler->Get("FPSEnabled", 1);
-	fov = configHandler->Get("FPSFOV", 45.0f);
+	scrollSpeed = configHandler->GetInt("FPSScrollSpeed") * 0.1f;
+	mouseScale = configHandler->GetFloat("FPSMouseScale");
+	enabled = configHandler->GetBool("FPSEnabled");
+	fov = configHandler->GetFloat("FPSFOV");
 }
 
 
@@ -54,8 +59,7 @@ void CFPSController::MouseWheelMove(float move)
 
 float3 CFPSController::GetPos()
 {
-	if (!gu->fpsMode)
-	{
+	if (!gu->fpsMode) {
 		const float margin = 0.01f;
 		const float xMin = margin;
 		const float zMin = margin;
@@ -65,7 +69,7 @@ float3 CFPSController::GetPos()
 		pos.x = max(xMin, min(xMax, pos.x));
 		pos.z = max(zMin, min(zMax, pos.z));
 
-		const float gndHeight = ground->GetHeightAboveWater(pos.x, pos.z);
+		const float gndHeight = ground->GetHeightAboveWater(pos.x, pos.z, false);
 		const float yMin = gndHeight + 5.0f;
 		const float yMax = 9000.0f;
 		pos.y = max(yMin, min(yMax, pos.y));
@@ -90,9 +94,8 @@ void CFPSController::SetPos(const float3& newPos)
 {
 	CCameraController::SetPos(newPos);
 
-	if (!gu->fpsMode)
-	{
-		pos.y = ground->GetHeightAboveWater(pos.x, pos.z) + oldHeight;
+	if (!gu->fpsMode) {
+		pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false) + oldHeight;
 	}
 }
 
@@ -112,7 +115,7 @@ float3 CFPSController::SwitchFrom() const
 void CFPSController::SwitchTo(bool showText)
 {
 	if (showText) {
-		logOutput.Print("Switching to FPS style camera");
+		LOG("Switching to FPS style camera");
 	}
 }
 
@@ -154,4 +157,4 @@ bool CFPSController::SetState(const StateMap& sm)
 	return true;
 }
 
- 
+

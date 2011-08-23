@@ -1,15 +1,14 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ExploSpikeProjectile.h"
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CExploSpikeProjectile, CProjectile, );
 

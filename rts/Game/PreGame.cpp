@@ -1,27 +1,27 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "Rendering/GL/myGL.h"
 #include <map>
 #include <SDL_keysym.h>
 #include <SDL_timer.h>
 #include <set>
 #include <cfloat>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "PreGame.h"
 
 #include "ClientSetup.h"
-#include "FPUCheck.h"
+#include "System/Sync/FPUCheck.h"
 #include "Game.h"
 #include "GameData.h"
 #include "GameServer.h"
 #include "GameSetup.h"
 #include "GameVersion.h"
+#include "GlobalUnsynced.h"
 #include "LoadScreen.h"
 #include "Player.h"
 #include "PlayerHandler.h"
-#include "TimeProfiler.h"
+#include "System/TimeProfiler.h"
 #include "UI/InfoConsole.h"
 
 #include "aGui/Gui.h"
@@ -30,7 +30,7 @@
 #include "Sim/Misc/GlobalSynced.h"
 #include "Sim/Misc/GlobalConstants.h"
 #include "Sim/Misc/TeamHandler.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/Exceptions.h"
 #include "System/NetProtocol.h"
 #include "System/TdfParser.h"
@@ -42,12 +42,15 @@
 #include "System/LoadSave/DemoRecorder.h"
 #include "System/LoadSave/DemoReader.h"
 #include "System/LoadSave/LoadSaveHandler.h"
+#include "System/Log/ILog.h"
 #include "System/Net/RawPacket.h"
 #include "System/Net/UnpackPacket.h"
 #include "System/Platform/errorhandler.h"
 
 using netcode::RawPacket;
 using std::string;
+
+CONFIG(bool, DemoFromDemo).defaultValue(false);
 
 CPreGame* pregame = NULL;
 
@@ -84,7 +87,7 @@ void CPreGame::LoadSetupscript(const std::string& script)
 void CPreGame::LoadDemo(const std::string& demo)
 {
 	assert(settings->isHost);
-	if (!configHandler->Get("DemoFromDemo", false))
+	if (!configHandler->GetBool("DemoFromDemo"))
 		net->DisableDemoRecording();
 	ReadDataFromDemo(demo);
 }
@@ -101,10 +104,11 @@ int CPreGame::KeyPressed(unsigned short k,bool isRepeat)
 {
 	if (k == SDLK_ESCAPE) {
 		if (keyInput->IsKeyPressed(SDLK_LSHIFT)) {
-			logOutput.Print("User exited");
+			LOG("User exited");
 			gu->globalQuit = true;
-		} else
-			logOutput.Print("Use shift-esc to quit");
+		} else {
+			LOG("Use shift-esc to quit");
+		}
 	}
 	return 0;
 }
@@ -160,7 +164,7 @@ bool CPreGame::Update()
 void CPreGame::StartServer(const std::string& setupscript)
 {
 	assert(!gameServer);
-	ScopedOnceTimer startserver("Starting GameServer");
+	ScopedOnceTimer startserver("PreGame::StartServer");
 	GameData* startupData = new GameData();
 	CGameSetup* setup = new CGameSetup();
 	setup->Init(setupscript);
@@ -196,9 +200,8 @@ void CPreGame::StartServer(const std::string& setupscript)
 
 void CPreGame::UpdateClientNet()
 {
-	if (net->CheckTimeout(0, true))
-	{
-		logOutput.Print("Server not reachable");
+	if (net->CheckTimeout(0, true)) {
+		LOG_L(L_WARNING, "Server not reachable");
 		gu->globalQuit = true;
 		return;
 	}
@@ -213,11 +216,11 @@ void CPreGame::UpdateClientNet()
 					netcode::UnpackPacket pckt(packet, 3);
 					std::string message;
 					pckt >> message;
-					logOutput.Print(message);
+					LOG("%s", message.c_str());
 					handleerror(NULL, "Remote requested quit: " + message, "Quit message", MBF_OK | MBF_EXCL);
-				} catch (netcode::UnpackPacketException &e) {
-					logOutput.Print("Got invalid QuitMessage: %s", e.err.c_str());
-				}		
+				} catch (const netcode::UnpackPacketException& ex) {
+					LOG_L(L_ERROR, "Got invalid QuitMessage: %s", ex.what());
+				}
 				break;
 			}
 			case NETMSG_CREATE_NEWPLAYER: {
@@ -247,8 +250,8 @@ void CPreGame::UpdateClientNet()
 					// the global broadcast will overwrite the user with the
 					// same values as here
 					playerHandler->AddPlayer(player);
-				} catch (netcode::UnpackPacketException &e) {
-					logOutput.Print("Got invalid New player message: %s", e.err.c_str());
+				} catch (const netcode::UnpackPacketException& ex) {
+					LOG_L(L_ERROR, "Got invalid New player message: %s", ex.what());
 				}
 				break;
 			}
@@ -273,7 +276,8 @@ void CPreGame::UpdateClientNet()
 					throw content_error("Invalid player number received from server");
 
 				gu->SetMyPlayer(playerNum);
-				logOutput.Print("User number %i (team %i, allyteam %i)", gu->myPlayerNum, gu->myTeam, gu->myAllyTeam);
+				LOG("User number %i (team %i, allyteam %i)",
+						gu->myPlayerNum, gu->myTeam, gu->myAllyTeam);
 
 				CLoadScreen::CreateInstance(gameSetup->MapFile(), modArchive, savefile);
 
@@ -282,7 +286,8 @@ void CPreGame::UpdateClientNet()
 				return;
 			}
 			default: {
-				logOutput.Print("Unknown net-msg received from CPreGame: %i", int(packet->data[0]));
+				LOG_L(L_WARNING, "Unknown net-msg received from CPreGame: %i",
+						(int)(packet->data[0]));
 				break;
 			}
 		}
@@ -291,9 +296,9 @@ void CPreGame::UpdateClientNet()
 
 void CPreGame::ReadDataFromDemo(const std::string& demoName)
 {
-	ScopedOnceTimer startserver("Reading demo data");
+	ScopedOnceTimer startserver("PreGame::ReadDataFromDemo");
 	assert(!gameServer);
-	logOutput.Print("Pre-scanning demo file for game data...");
+	LOG("Pre-scanning demo file for game data...");
 	CDemoReader scanner(demoName, 0);
 
 	boost::shared_ptr<const RawPacket> buf(scanner.GetData(static_cast<float>(FLT_MAX )));
@@ -304,8 +309,8 @@ void CPreGame::ReadDataFromDemo(const std::string& demoName)
 			GameData* data = NULL;
 			try {
 				data = new GameData(boost::shared_ptr<const RawPacket>(buf));
-			} catch (netcode::UnpackPacketException &e) {
-				throw content_error("Demo contains invalid GameData: " + e.err);
+			} catch (const netcode::UnpackPacketException& ex) {
+				throw content_error(std::string("Demo contains invalid GameData: ") + ex.what());
 			}
 
 			CGameSetup* demoScript = new CGameSetup();
@@ -368,7 +373,7 @@ void CPreGame::ReadDataFromDemo(const std::string& demoName)
 			{
 				throw content_error("Demo contains incorrect script");
 			}
-			logOutput.Print("Starting GameServer");
+			LOG("Starting GameServer");
 			good_fpu_control_registers("before CGameServer creation");
 
 			gameServer = new CGameServer(settings->hostIP, settings->hostPort, data, tempSetup);
@@ -376,7 +381,7 @@ void CPreGame::ReadDataFromDemo(const std::string& demoName)
 			delete data;
 
 			good_fpu_control_registers("after CGameServer creation");
-			logOutput.Print("GameServer started");
+			LOG("GameServer started");
 			break;
 		}
 
@@ -392,14 +397,14 @@ void CPreGame::ReadDataFromDemo(const std::string& demoName)
 
 void CPreGame::GameDataReceived(boost::shared_ptr<const netcode::RawPacket> packet)
 {
-	ScopedOnceTimer startserver("Loading client data");
+	ScopedOnceTimer startserver("PreGame::GameDataReceived");
 
 	try {
 		GameData *data = new GameData(packet);
 
 		gameData.reset(data);
-	} catch (netcode::UnpackPacketException &e) {
-		throw content_error("Server sent us invalid GameData: " + e.err);
+	} catch (const netcode::UnpackPacketException& ex) {
+		throw content_error(std::string("Server sent us invalid GameData: ") + ex.what());
 	}
 
 	CGameSetup* temp = new CGameSetup();
@@ -435,19 +440,19 @@ void CPreGame::GameDataReceived(boost::shared_ptr<const netcode::RawPacket> pack
 	}
 
 	gs->SetRandSeed(gameData->GetRandomSeed(), true);
-	LogObject() << "Using map: " << gameSetup->mapName << "\n";
+	LOG("Using map: %s", gameSetup->mapName.c_str());
 
 	vfsHandler->AddArchiveWithDeps(gameSetup->mapName, false);
 	archiveScanner->CheckArchive(gameSetup->mapName, gameData->GetMapChecksum());
 
-	LogObject() << "Using game: " << gameSetup->modName << "\n";
+	LOG("Using game: %s", gameSetup->modName.c_str());
 	vfsHandler->AddArchiveWithDeps(gameSetup->modName, false);
 	modArchive = archiveScanner->ArchiveFromName(gameSetup->modName);
-	LogObject() << "Using game archive: " << modArchive << "\n";
+	LOG("Using game archive: %s", modArchive.c_str());
 	archiveScanner->CheckArchive(modArchive, gameData->GetModChecksum());
 
 	if (net && net->GetDemoRecorder()) {
 		net->GetDemoRecorder()->SetName(gameSetup->mapName, gameSetup->modName);
-		LogObject() << "recording demo: " << net->GetDemoRecorder()->GetName() << "\n";
+		LOG("recording demo: %s", net->GetDemoRecorder()->GetName().c_str());
 	}
 }

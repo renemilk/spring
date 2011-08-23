@@ -1,23 +1,23 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <SDL_keysym.h>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
-#include "Sim/Misc/TeamHandler.h"
-#include "Sim/Misc/GlobalSynced.h"
-#include "LogOutput.h"
 #include "MouseHandler.h"
-#include "NetProtocol.h"
 #include "QuitBox.h"
 #include "Game/PlayerHandler.h"
 #include "Game/GameSetup.h"
-#include "LoadSave/LoadSaveHandler.h"
-#include "TimeUtil.h"
-#include "FileSystem/FileSystem.h"
-#include "Sim/Misc/ModInfo.h"
+#include "Game/GlobalUnsynced.h"
 #include "Rendering/glFont.h"
 #include "Rendering/GL/myGL.h"
+#include "Sim/Misc/GlobalSynced.h"
+#include "Sim/Misc/ModInfo.h"
+#include "Sim/Misc/TeamHandler.h"
+#include "System/Log/ILog.h"
+#include "System/NetProtocol.h"
+#include "System/TimeUtil.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/LoadSave/LoadSaveHandler.h"
 
 #define MAX_QUIT_TEAMS (teamHandler->ActiveTeams() - 1)
 
@@ -303,25 +303,26 @@ void CQuitBox::MouseRelease(int x,int y,int button)
 		}
 		// save current game state
 		if (InBox(mx,my,box+saveBox)) {
-			if (filesystem.CreateDirectory("Saves")) {
+			if (FileSystem::CreateDirectory("Saves")) {
 				std::string timeStr = CTimeUtil::GetCurrentTimeStr();
 				std::string saveFileName(timeStr + "_" + modInfo.filename + "_" + gameSetup->mapName);
 				saveFileName = "Saves/" + saveFileName + ".ssf";
-				if (!filesystem.FileExists(saveFileName)) {
-					logOutput.Print("Saving game to %s\n", saveFileName.c_str());
+				if (!FileSystem::FileExists(saveFileName)) {
+					LOG("Saving game to %s", saveFileName.c_str());
 					ILoadSaveHandler* ls = ILoadSaveHandler::Create();
 					ls->mapName = gameSetup->mapName;
 					ls->modName = modInfo.filename;
 					ls->SaveGame(saveFileName);
 					delete ls;
 				} else {
-					logOutput.Print("Error: File %s already exists, game NOT saved!\n", saveFileName.c_str());
+					LOG_L(L_ERROR, "File %s already exists, game NOT saved!",
+							saveFileName.c_str());
 				}
 			}
 		}
 	}
 	else if (InBox(mx, my, box + quitBox)) {
-		logOutput.Print("User exited");
+		LOG("User exited");
 		gu->globalQuit = true;
 	}
 	// if we're still in the game, remove the resign box

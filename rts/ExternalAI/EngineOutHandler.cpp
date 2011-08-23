@@ -5,11 +5,13 @@
 #include "ExternalAI/SkirmishAIWrapper.h"
 #include "ExternalAI/SkirmishAIData.h"
 #include "ExternalAI/SkirmishAIHandler.h"
+#include "ExternalAI/SSkirmishAICallbackImpl.h"
 #include "ExternalAI/IAILibraryManager.h"
 #include "ExternalAI/Interface/AISCommands.h"
 #include "Sim/Misc/GlobalSynced.h"
 #include "Game/GameHelper.h"
 #include "Game/GameSetup.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/Player.h"
 #include "Game/PlayerHandler.h"
 #include "Sim/Units/Unit.h"
@@ -17,15 +19,16 @@
 #include "Sim/Misc/Team.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Weapons/WeaponDef.h"
-#include "NetProtocol.h"
-#include "GlobalUnsynced.h"
-#include "ConfigHandler.h"
-#include "LogOutput.h"
-#include "Util.h"
-#include "TimeProfiler.h"
+#include "System/NetProtocol.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
+#include "System/Util.h"
+#include "System/TimeProfiler.h"
 
-#include "creg/STL_Map.h"
+#include "System/creg/STL_Map.h"
 
+CONFIG(int, CatchAIExceptions).defaultValue(1);
+CONFIG(bool, AI_UnpauseAfterInit).defaultValue(true);
 
 CR_BIND_DERIVED(CEngineOutHandler, CObject, )
 
@@ -55,7 +58,7 @@ bool CEngineOutHandler::IsCatchExceptions() {
 	static bool isCatchExceptions;
 
 	if (!init) {
-		isCatchExceptions = (configHandler->Get("CatchAIExceptions", 1) != 0);
+		isCatchExceptions = (configHandler->GetInt("CatchAIExceptions") != 0);
 		init = true;
 	}
 
@@ -66,9 +69,9 @@ void CEngineOutHandler::HandleAIException(const char* description) {
 
 	if (CEngineOutHandler::IsCatchExceptions()) {
 		if (description) {
-			logOutput.Print("AI Exception: \'%s\'", description);
+			LOG_L(L_ERROR, "AI Exception: \'%s\'", description);
 		} else {
-			logOutput.Print("AI Exception");
+			LOG_L(L_ERROR, "AI Exception");
 		}
 //		exit(-1);
 	}
@@ -122,7 +125,7 @@ CEngineOutHandler::~CEngineOutHandler() {
 
 // This macro should be insterted at the start of each method sending AI events
 #define AI_EVT_MTH()                               \
-		if (id_skirmishAI.size() == 0) { return; } \
+		if (id_skirmishAI.empty()) { return; } \
 		SCOPED_TIMER("AI Total");
 
 
@@ -550,14 +553,14 @@ bool CEngineOutHandler::SendLuaMessages(int aiTeam, const char* inData, std::vec
 void CEngineOutHandler::CreateSkirmishAI(const size_t skirmishAIId) {
 	SCOPED_TIMER("AI Total");
 
-	//const bool unpauseAfterAIInit = configHandler->Get("AI_UnpauseAfterInit", true);
+	//const bool unpauseAfterAIInit = configHandler->GetBool("AI_UnpauseAfterInit");
 
 	// Pause the game for letting the AI initialize,
 	// as this can take quite some time.
 	/*bool weDoPause = !gs->paused;
 	if (weDoPause) {
 		const std::string& myPlayerName = playerHandler->Player(gu->myPlayerNum)->name;
-		logOutput.Print(
+		LOG(
 				"Player %s (auto)-paused the game for letting Skirmish AI"
 				" %s initialize for controlling team %i.%s",
 				myPlayerName.c_str(), key.GetShortName().c_str(), teamId,

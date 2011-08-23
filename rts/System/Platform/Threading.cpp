@@ -1,13 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
-#include "StdAfx.h"
 #include "Threading.h"
 #include "Rendering/GL/myGL.h"
 
 #include <boost/thread.hpp>
 #ifdef WIN32
-namespace windows {
 	#include <windows.h>
-};
 #endif
 
 namespace Threading {
@@ -18,9 +15,11 @@ namespace Threading {
 #ifdef USE_GML
 	static int const noThreadID = -1;
 	static int simThreadID = noThreadID;
+	static int batchThreadID = noThreadID;
 #else
 	static boost::thread::id noThreadID;
 	static boost::thread::id simThreadID;
+	static boost::thread::id batchThreadID;
 #endif	
 
 
@@ -31,7 +30,7 @@ namespace Threading {
 		//! which returns in all threads the current active one, so we need to translate it
 		//! with DuplicateHandle to an absolute handle valid in our watchdog thread
 		NativeThreadHandle hThread;
-		DuplicateHandle(GetCurrentProcess(), ::GetCurrentThread(), GetCurrentProcess(), &hThread, 0, TRUE, DUPLICATE_SAME_ACCESS);
+		::DuplicateHandle(::GetCurrentProcess(), ::GetCurrentThread(), ::GetCurrentProcess(), &hThread, 0, TRUE, DUPLICATE_SAME_ACCESS);
 		return hThread;
 	#else
 		return pthread_self();
@@ -45,16 +44,6 @@ namespace Threading {
 		return ::GetCurrentThreadId();
 	#else
 		return pthread_self();
-	#endif
-	}
-
-
-	bool NativeThreadIdsEqual(const NativeThreadId& thID1, const NativeThreadId& thID2)
-	{
-	#ifdef WIN32
-		return (thID1 == thID2);
-	#else
-		return pthread_equal(thID1, thID2);
 	#endif
 	}
 
@@ -80,9 +69,9 @@ namespace Threading {
 
 	void SetSimThread(bool set) {
 #ifdef USE_GML // gmlThreadNumber is likely to be much faster than boost::this_thread::get_id()
-		simThreadID = set ? gmlThreadNumber : noThreadID;
+		batchThreadID = simThreadID = set ? gmlThreadNumber : noThreadID;
 #else
-		simThreadID = set ? boost::this_thread::get_id() : noThreadID;
+		batchThreadID = simThreadID = set ? boost::this_thread::get_id() : noThreadID;
 #endif
 	}
 	bool IsSimThread() {
@@ -90,6 +79,21 @@ namespace Threading {
 		return gmlThreadNumber == simThreadID;
 #else
 		return boost::this_thread::get_id() == simThreadID;
+#endif
+	}
+
+	void SetBatchThread(bool set) {
+#ifdef USE_GML // gmlThreadNumber is likely to be much faster than boost::this_thread::get_id()
+		batchThreadID = set ? gmlThreadNumber : noThreadID;
+#else
+		batchThreadID = set ? boost::this_thread::get_id() : noThreadID;
+#endif
+	}
+	bool IsBatchThread() {
+#ifdef USE_GML
+		return gmlThreadNumber == batchThreadID;
+#else
+		return boost::this_thread::get_id() == batchThreadID;
 #endif
 	}
 

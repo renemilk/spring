@@ -35,9 +35,6 @@ SET(USE_GML_DEBUG FALSE CACHE BOOL "Use GML call debugging?")
 INCLUDE_DIRECTORIES(BEFORE lib/lua/include)
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include/AL)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/System/)
-
-
 
 ### Assemble common libraries
 Add_Subdirectory(System/Sound)
@@ -71,7 +68,7 @@ Add_Subdirectory(aGui)
 Add_Subdirectory(Menu)
 Add_Subdirectory(Map)
 Add_Subdirectory(Sim)
-Add_Subdirectory(System)
+#Add_Subdirectory(System) # this is already added in ../
 
 SET(engineSources
 		${sources_engine_Game}

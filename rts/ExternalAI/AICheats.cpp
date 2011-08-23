@@ -2,7 +2,6 @@
 
 #include "AICheats.h"
 
-#include "StdAfx.h"
 #include "ExternalAI/SkirmishAIWrapper.h"
 #include "Game/TraceRay.h"
 #include "Sim/Units/Unit.h"
@@ -16,7 +15,7 @@
 #include "Sim/Misc/TeamHandler.h"
 #include "Game/GameServer.h"
 #include "Game/GameSetup.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include <vector>
 #include <list>

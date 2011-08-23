@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaConstCMD.h"
 
@@ -64,7 +63,7 @@ bool LuaConstCMD::PushEntries(lua_State* L)
 	PUSH_CMD(RECLAIM);
 	PUSH_CMD(CLOAK);
 	PUSH_CMD(STOCKPILE);
-	PUSH_CMD(DGUN);
+	PUSH_CMD(MANUALFIRE);
 	PUSH_CMD(RESTORE);
 	PUSH_CMD(REPEAT);
 	PUSH_CMD(TRAJECTORY);
@@ -74,6 +73,7 @@ bool LuaConstCMD::PushEntries(lua_State* L)
 	PUSH_CMD(LOOPBACKATTACK);
 	PUSH_CMD(IDLEMODE);
 
+	LuaInsertDualMapPair(L, "DGUN", CMD_MANUALFIRE); // NOTE: deprecated, remove after 0.83.*
 	return true;
 }
 

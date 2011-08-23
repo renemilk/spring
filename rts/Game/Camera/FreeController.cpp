@@ -1,28 +1,39 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <boost/cstdint.hpp>
 #include <SDL_keysym.h>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "FreeController.h"
 #include "Game/Camera.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/ConfigHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
 #include "System/Input/KeyInput.h"
 
 using std::max;
 using std::min;
 
+CONFIG(bool, CamFreeEnabled).defaultValue(false);
+CONFIG(bool, CamFreeInvertAlt).defaultValue(false);
+CONFIG(bool, CamFreeGoForward).defaultValue(false);
+CONFIG(float, CamFreeFOV).defaultValue(45.0f);
+CONFIG(float, CamFreeScrollSpeed).defaultValue(500.0f);
+CONFIG(float, CamFreeGravity).defaultValue(-500.0f);
+CONFIG(float, CamFreeSlide).defaultValue(0.5f);
+CONFIG(float, CamFreeGroundOffset).defaultValue(16.0f);
+CONFIG(float, CamFreeTiltSpeed).defaultValue(150.0f);
+CONFIG(float, CamFreeAutoTilt).defaultValue(150.0f);
+CONFIG(float, CamFreeVelTime).defaultValue(1.5f);
+CONFIG(float, CamFreeAngVelTime).defaultValue(1.0f);
+
 /******************************************************************************/
 /******************************************************************************/
 //
 //  TODO: - separate speed variable for tracking state
-//        - smooth ransitions between tracking states and units
+//        - smooth transitions between tracking states and units
 //        - improve controls
 //        - rename it?  ;-)
 //
@@ -46,21 +57,21 @@ CFreeController::CFreeController()
 	}
 	pos -= (dir * 1000.0f);
 
-	enabled     = !!configHandler->Get("CamFreeEnabled",   0);
-	invertAlt   = !!configHandler->Get("CamFreeInvertAlt", 0);
-	goForward   = !!configHandler->Get("CamFreeGoForward", 0);
-	fov         = configHandler->Get("CamFreeFOV",           45.0f);
-	scrollSpeed = configHandler->Get("CamFreeScrollSpeed",  500.0f);
-	gravity     = configHandler->Get("CamFreeGravity",     -500.0f);
-	slide       = configHandler->Get("CamFreeSlide",          0.5f);
-	gndOffset   = configHandler->Get("CamFreeGroundOffset",  16.0f);
-	tiltSpeed   = configHandler->Get("CamFreeTiltSpeed",    150.0f);
+	enabled     = configHandler->GetBool("CamFreeEnabled");
+	invertAlt   = configHandler->GetBool("CamFreeInvertAlt");
+	goForward   = configHandler->GetBool("CamFreeGoForward");
+	fov         = configHandler->GetFloat("CamFreeFOV");
+	scrollSpeed = configHandler->GetFloat("CamFreeScrollSpeed");
+	gravity     = configHandler->GetFloat("CamFreeGravity");
+	slide       = configHandler->GetFloat("CamFreeSlide");
+	gndOffset   = configHandler->GetFloat("CamFreeGroundOffset");
+	tiltSpeed   = configHandler->GetFloat("CamFreeTiltSpeed");
 	tiltSpeed   = tiltSpeed * (PI / 180.0);
-	autoTilt    = configHandler->Get("CamFreeAutoTilt",     150.0f);
+	autoTilt    = configHandler->GetFloat("CamFreeAutoTilt");
 	autoTilt    = autoTilt * (PI / 180.0);
-	velTime     = configHandler->Get("CamFreeVelTime",        1.5f);
+	velTime     = configHandler->GetFloat("CamFreeVelTime");
 	velTime     = max(0.1f, velTime);
-	avelTime    = configHandler->Get("CamFreeAngVelTime",     1.0f);
+	avelTime    = configHandler->GetFloat("CamFreeAngVelTime");
 	avelTime    = max(0.1f, avelTime);
 }
 
@@ -96,7 +107,7 @@ void CFreeController::Update()
 		prevAvel = avel;
 		return;
 	}
-	
+
 	// safeties
 	velTime  = max(0.1f,  velTime);
 	avelTime = max(0.1f, avelTime);
@@ -115,13 +126,13 @@ void CFreeController::Update()
 	// adjustment to match the ground slope
 	float autoTiltVel = 0.0f;
 	if (gndLock && (autoTilt > 0.0f)) {
-		const float gndHeight = ground->GetHeightReal(pos.x, pos.z);
+		const float gndHeight = ground->GetHeightReal(pos.x, pos.z, false);
 		if (pos.y < (gndHeight + gndOffset + 1.0f)) {
 			float3 hDir;
 			hDir.y = 0.0f;
 			hDir.x = (float)sin(camera->rot.y);
 			hDir.z = (float)cos(camera->rot.y);
-			const float3 gndNormal = ground->GetSmoothNormal(pos.x, pos.z);
+			const float3 gndNormal = ground->GetSmoothNormal(pos.x, pos.z, false);
 			const float dot = gndNormal.dot(hDir);
 			const float gndRotX = (float)acos(dot) - (PI * 0.5f);
 			const float rotXdiff = (gndRotX - camera->rot.x);
@@ -156,9 +167,9 @@ void CFreeController::Update()
 		const float dGrav = (gravity * ft);
 		vel.y += dGrav;
 		if (slide > 0.0f) {
-			const float gndHeight = ground->GetHeightReal(pos.x, pos.z);
+			const float gndHeight = ground->GetHeightReal(pos.x, pos.z, false);
 			if (pos.y < (gndHeight + gndOffset + 1.0f)) {
-				const float3 gndNormal = ground->GetSmoothNormal(pos.x, pos.z);
+				const float3 gndNormal = ground->GetSmoothNormal(pos.x, pos.z, false);
 				const float dotVal = gndNormal.y;
 				const float scale = (dotVal * slide * -dGrav);
 				vel.x += (gndNormal.x * scale);
@@ -210,7 +221,7 @@ void CFreeController::Update()
 	}
 
 	// setup ground lock
-	const float gndHeight = ground->GetHeightReal(pos.x, pos.z);
+	const float gndHeight = ground->GetHeightReal(pos.x, pos.z, false);
 
 	if (keyInput->IsKeyPressed(SDLK_LSHIFT)) {
 		if (ctrlVelY > 0.0f) {
@@ -345,7 +356,7 @@ void CFreeController::MouseWheelMove(float move)
 
 void CFreeController::SetPos(const float3& newPos)
 {
-	const float h = ground->GetHeightReal(newPos.x, newPos.z);
+	const float h = ground->GetHeightReal(newPos.x, newPos.z, false);
 	const float3 target = float3(newPos.x, h, newPos.z);
 //	const float3 target = newPos;
 	const float yDiff = pos.y - target.y;
@@ -359,7 +370,7 @@ void CFreeController::SetPos(const float3& newPos)
 	CCameraController::SetPos(newPos);
 	pos.y = oldPosY;
 	if (gndOffset != 0.0f) {
-		const float h = ground->GetHeightReal(pos.x, pos.z);
+		const float h = ground->GetHeightReal(pos.x, pos.z, false);
 		const float absH = h + fabsf(gndOffset);
 		if (pos.y < absH) {
 			pos.y = absH;
@@ -391,14 +402,14 @@ float3 CFreeController::SwitchFrom() const
 {
 	const float x = max(0.1f, min(float3::maxxpos - 0.1f, pos.x));
 	const float z = max(0.1f, min(float3::maxzpos - 0.1f, pos.z));
-	return float3(x, ground->GetHeightAboveWater(x, z) + 5.0f, z);
+	return float3(x, ground->GetHeightAboveWater(x, z, false) + 5.0f, z);
 }
 
 
 void CFreeController::SwitchTo(bool showText)
 {
 	if (showText) {
-		logOutput.Print("Switching to Free style camera");
+		LOG("Switching to Free style camera");
 	}
 	prevVel  = ZeroVector;
 	prevAvel = ZeroVector;

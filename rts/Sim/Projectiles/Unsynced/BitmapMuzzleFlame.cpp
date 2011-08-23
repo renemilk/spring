@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "BitmapMuzzleFlame.h"
 #include "Sim/Misc/GlobalSynced.h"
@@ -10,7 +9,6 @@
 #include "Rendering/Textures/ColorMap.h"
 #include "Rendering/Textures/TextureAtlas.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
-#include "GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CBitmapMuzzleFlame, CProjectile, );
 

@@ -1,19 +1,4 @@
-/*
-	Copyright (c) 2008 Robin Vobruba <hoijui.quaero@gmail.com>
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include "AIAICallback.h"
 
@@ -119,48 +104,48 @@ springLegacyAI::CAIAICallback::~CAIAICallback() {
 		delete weaponDefs[i];
 		weaponDefs[i] = NULL;
 	}
-	delete weaponDefs;
+	delete[] weaponDefs;
 	weaponDefs = NULL;
-	delete weaponDefFrames;
+	delete[] weaponDefFrames;
 	weaponDefFrames = NULL;
 
 	for (int i=0; i < numUnitDefs; ++i) {
 		delete unitDefs[i];
 		unitDefs[i] = NULL;
 	}
-	delete unitDefs;
+	delete[] unitDefs;
 	unitDefs = NULL;
-	delete unitDefFrames;
+	delete[] unitDefFrames;
 	unitDefFrames = NULL;
 
 	for (int i=0; i < numFeatDefs; ++i) {
 		delete featureDefs[i];
 		featureDefs[i] = NULL;
 	}
-	delete featureDefs;
+	delete[] featureDefs;
 	featureDefs = NULL;
-	delete featureDefFrames;
+	delete[] featureDefFrames;
 	featureDefFrames = NULL;
 
 	for (int i=0; i < maxGroups; ++i) {
 		delete groupPossibleCommands[i];
 		groupPossibleCommands[i] = NULL;
 	}
-	delete groupPossibleCommands;
+	delete[] groupPossibleCommands;
 	groupPossibleCommands = NULL;
 
 	for (int i=0; i < MAX_UNITS; ++i) {
 		delete unitPossibleCommands[i];
 		unitPossibleCommands[i] = NULL;
 	}
-	delete unitPossibleCommands;
+	delete[] unitPossibleCommands;
 	unitPossibleCommands = NULL;
 
 	for (int i=0; i < MAX_UNITS; ++i) {
 		delete unitCurrentCommandQueues[i];
 		unitCurrentCommandQueues[i] = NULL;
 	}
-	delete unitCurrentCommandQueues;
+	delete[] unitCurrentCommandQueues;
 	unitCurrentCommandQueues = NULL;
 
 	if (numClbInstances == 0) {
@@ -685,7 +670,7 @@ const springLegacyAI::UnitDef* springLegacyAI::CAIAICallback::GetUnitDefById(int
 		unitDef->canKamikaze = sAICallback->UnitDef_isAbleToKamikaze(skirmishAIId, unitDefId);
 		unitDef->kamikazeDist = sAICallback->UnitDef_getKamikazeDist(skirmishAIId, unitDefId);
 		unitDef->targfac = sAICallback->UnitDef_isTargetingFacility(skirmishAIId, unitDefId);
-		unitDef->canDGun = sAICallback->UnitDef_isAbleToDGun(skirmishAIId, unitDefId);
+		unitDef->canDGun = sAICallback->UnitDef_canManualFire(skirmishAIId, unitDefId);
 		unitDef->needGeo = sAICallback->UnitDef_isNeedGeo(skirmishAIId, unitDefId);
 		unitDef->isFeature = sAICallback->UnitDef_isFeature(skirmishAIId, unitDefId);
 		unitDef->hideDamage = sAICallback->UnitDef_isHideDamage(skirmishAIId, unitDefId);
@@ -710,7 +695,6 @@ const springLegacyAI::UnitDef* springLegacyAI::CAIAICallback::GetUnitDefById(int
 		unitDef->flareTime = sAICallback->UnitDef_getFlareTime(skirmishAIId, unitDefId);
 		unitDef->flareSalvoSize = sAICallback->UnitDef_getFlareSalvoSize(skirmishAIId, unitDefId);
 		unitDef->flareSalvoDelay = sAICallback->UnitDef_getFlareSalvoDelay(skirmishAIId, unitDefId);
-		//unitDef->smoothAnim = sAICallback->UnitDef_isSmoothAnim(skirmishAIId, unitDefId);
 		unitDef->smoothAnim = false;
 		unitDef->canLoopbackAttack = sAICallback->UnitDef_isAbleToLoopbackAttack(skirmishAIId, unitDefId);
 		unitDef->levelGround = sAICallback->UnitDef_isLevelGround(skirmishAIId, unitDefId);
@@ -1322,19 +1306,19 @@ float springLegacyAI::CAIAICallback::GetFeatureReclaimLeft(int featureId) {
 }
 
 float3 springLegacyAI::CAIAICallback::GetFeaturePos(int featureId) {
-	
+
 	float pos_cache[3];
 	sAICallback->Feature_getPosition(skirmishAIId, featureId, pos_cache);
 	return pos_cache;
 }
 
 int springLegacyAI::CAIAICallback::GetNumUnitDefs() {
-	return sAICallback->getUnitDefs(skirmishAIId, NULL, NULL);
+	return sAICallback->getUnitDefs(skirmishAIId, NULL, 0);
 }
 
 void springLegacyAI::CAIAICallback::GetUnitDefList(const UnitDef** list) {
 
-	int size = sAICallback->getUnitDefs(skirmishAIId, NULL, NULL);
+	int size = sAICallback->getUnitDefs(skirmishAIId, NULL, 0);
 	int* unitDefIds = new int[size];
 
 	// get actual number of IDs
@@ -1447,7 +1431,6 @@ weaponDef->uptime = sAICallback->WeaponDef_getUpTime(skirmishAIId, weaponDefId);
 weaponDef->flighttime = sAICallback->WeaponDef_getFlightTime(skirmishAIId, weaponDefId);
 weaponDef->metalcost = sAICallback->WeaponDef_getCost(skirmishAIId, weaponDefId, m);
 weaponDef->energycost = sAICallback->WeaponDef_getCost(skirmishAIId, weaponDefId, e);
-weaponDef->supplycost = sAICallback->WeaponDef_getSupplyCost(skirmishAIId, weaponDefId);
 weaponDef->projectilespershot = sAICallback->WeaponDef_getProjectilesPerShot(skirmishAIId, weaponDefId);
 //weaponDef->id = sAICallback->WeaponDef_getId(skirmishAIId, weaponDefId);
 weaponDef->id = weaponDefId;
@@ -1713,7 +1696,7 @@ int springLegacyAI::CAIAICallback::InitPath(float3 start, float3 end, int pathTy
 
 float3 springLegacyAI::CAIAICallback::GetNextWaypoint(int pathId) {
 
-	float ret_posF3[3];
+	float ret_posF3[3] = {0.0f, 0.0f, 0.0f};
 	SGetNextWaypointPathCommand cmd = {pathId, ret_posF3};
 	sAICallback->Engine_handleCommand(skirmishAIId, COMMAND_TO_ID_ENGINE, -1, COMMAND_PATH_GET_NEXT_WAYPOINT, &cmd);
 	return float3(cmd.ret_nextWaypoint_posF3_out);

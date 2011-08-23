@@ -1,14 +1,12 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifdef _MSC_VER
-#include "StdAfx.h"
-#endif
+#include "lib/lobby/Connection.h"
+#include "System/Platform/Win/win32.h"
 #include "UpdaterWindow.h"
 
 #include <boost/bind.hpp>
 
-#include "ConfigHandler.h"
-#include "lib/lobby/Connection.h"
+#include "System/Config/ConfigHandler.h"
 #include "aGui/LineEdit.h"
 #include "aGui/VerticalLayout.h"
 #include "aGui/HorizontalLayout.h"
@@ -28,7 +26,7 @@ UpdaterWindow::UpdaterWindow(Connection* _con) : agui::Window("Lobby connection"
 	agui::HorizontalLayout* usrLayout = new agui::HorizontalLayout(wndLayout);
 	new agui::TextElement(std::string("Username:"), usrLayout);
 	user = new agui::LineEdit(usrLayout);
-	user->SetContent(configHandler->GetString("name", "UnnamedPlayer"));
+	user->SetContent(configHandler->GetString("name"));
 	user->SetWeight(2);
 	agui::HorizontalLayout* pwdLayout = new agui::HorizontalLayout(wndLayout);
 	new agui::TextElement(std::string("Password:"), pwdLayout);
@@ -77,7 +75,7 @@ void UpdaterWindow::ShowAggreement(const std::string& text)
 	agreement = new agui::Window("Agreement");
 	agreement->SetSize(0.6, 0.7);
 	agui::VerticalLayout* vLay = new agui::VerticalLayout(agreement);
-	agui::TextElement* textEl = new agui::TextElement(text, vLay);
+	/*agui::TextElement* textEl = */new agui::TextElement(text, vLay);
 
 	agui::HorizontalLayout* bttnLayout = new agui::HorizontalLayout(vLay);
 	bttnLayout->SetSize(0.0f, 0.04f, true);

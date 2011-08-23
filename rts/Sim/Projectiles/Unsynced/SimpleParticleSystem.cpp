@@ -1,15 +1,14 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "SimpleParticleSystem.h"
 #include "GenericParticleProjectile.h"
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/ColorMap.h"
-#include "System/GlobalUnsynced.h"
 #include "System/float3.h"
 
 CR_BIND_DERIVED(CSimpleParticleSystem, CProjectile, );
@@ -55,12 +54,29 @@ CR_REG_METADATA_SUB(CSimpleParticleSystem, Particle,
 ));
 
 CSimpleParticleSystem::CSimpleParticleSystem()
-:	CProjectile()
+	: CProjectile()
+	, emitVector(ZeroVector)
+	, emitMul(1.0f, 1.0f, 1.0f)
+	, gravity(ZeroVector)
+	, particleSpeed(0.0f)
+	, particleSpeedSpread(0.0f)
+	, emitRot(0.0f)
+	, emitRotSpread(0.0f)
+	, texture(NULL)
+	, colorMap(NULL)
+	, directional(false)
+	, particleLife(0.0f)
+	, particleLifeSpread(0.0f)
+	, particleSize(0.0f)
+	, particleSizeSpread(0.0f)
+	, airdrag(0.0f)
+	, sizeGrowth(0.0f)
+	, sizeMod(0.0f)
+	, numParticles(0)
+	, particles(NULL)
 {
 	checkCol = false;
 	useAirLos = true;
-	particles = NULL;
-	emitMul = float3(1.0f, 1.0f, 1.0f);
 }
 
 CSimpleParticleSystem::~CSimpleParticleSystem()

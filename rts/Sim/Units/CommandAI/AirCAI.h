@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef __AIR_CAI_H__
-#define __AIR_CAI_H__
+#ifndef AIR_CAI_H
+#define AIR_CAI_H
 
 #include "MobileCAI.h"
 
@@ -20,10 +20,9 @@ public:
 	int GetDefaultCmd(const CUnit* pointed, const CFeature* feature);
 	void SlowUpdate();
 	void GiveCommandReal(const Command& c);
-	void DrawCommands();
 	void AddUnit(CUnit* unit);
 	void FinishCommand();
-	void BuggerOff(float3 pos, float radius);
+	void BuggerOff(const float3& pos, float radius);
 //	void StopMove();
 	
 	void SetGoal(const float3& pos, const float3& curPos, float goalRadius = SQUARE_SIZE);
@@ -36,6 +35,12 @@ public:
 
 	bool IsValidTarget(const CUnit* enemy) const;
 
+private:
+	void PushOrUpdateReturnFight() {
+		CCommandAI::PushOrUpdateReturnFight(commandPos1, commandPos2);
+	}
+
+
 	float3 basePos;
 	float3 baseDir;
 
@@ -45,11 +50,6 @@ public:
 
 	int lastPC1;
 	int lastPC2;
-
-protected:
-	void PushOrUpdateReturnFight() {
-		CCommandAI::PushOrUpdateReturnFight(commandPos1, commandPos2);
-	}
 };
 
-#endif // __AIR_CAI_H__
+#endif // AIR_CAI_H

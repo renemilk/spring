@@ -2,12 +2,12 @@
 
 #include "ExternalAI/AICallback.h"
 
-#include "StdAfx.h"
 #include "Game/Game.h"
 #include "Game/Camera/CameraController.h"
 #include "Game/Camera.h"
 #include "Game/CameraHandler.h"
 #include "Game/GameHelper.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/TraceRay.h"
 #include "Game/GameSetup.h"
 #include "Game/PlayerHandler.h"
@@ -20,6 +20,7 @@
 #include "Map/MetalMap.h"
 #include "Map/ReadMap.h"
 #include "Rendering/DebugDrawerAI.h"
+#include "Rendering/LineDrawer.h"
 #include "Rendering/Models/3DModel.h"
 #include "Rendering/UnitDrawer.h"
 #include "Sim/Features/Feature.h"
@@ -32,12 +33,12 @@
 #include "Sim/Misc/ModInfo.h"
 #include "Sim/Misc/Wind.h"
 #include "Sim/Misc/TeamHandler.h"
+#include "Sim/MoveTypes/MoveInfo.h"
 #include "Sim/Path/IPathManager.h"
 #include "Sim/Units/Groups/Group.h"
 #include "Sim/Units/Groups/GroupHandler.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
 #include "Sim/Units/CommandAI/CommandQueue.h"
-#include "Sim/Units/CommandAI/LineDrawer.h"
 #include "Sim/Units/UnitTypes/Factory.h"
 #include "Sim/Units/BuildInfo.h"
 #include "Sim/Units/UnitDefHandler.h"
@@ -48,12 +49,18 @@
 #include "ExternalAI/SkirmishAIHandler.h"
 #include "ExternalAI/EngineOutHandler.h"
 #include "System/mmgr.h"
-#include "System/LogOutput.h"
+#include "System/EventHandler.h"
+#include "System/Log/ILog.h"
 #include "System/NetProtocol.h"
 #include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/DataDirsAccess.h"
 #include "System/FileSystem/FileSystem.h"
-#include "System/FileSystem/FileSystemHandler.h"
+#include "System/FileSystem/FileQueryFlags.h"
 #include "System/Platform/errorhandler.h"
+
+#include <string>
+#include <vector>
+#include <map>
 
 // Cast id to unsigned to catch negative ids in the same operations,
 // cast MAX_* to unsigned to suppress GCC comparison between signed/unsigned warning.
@@ -144,13 +151,14 @@ void CAICallback::SendTextMsg(const char* text, int zone)
 	const SkirmishAIData* aiData = skirmishAIHandler.GetSkirmishAI(*(teamAIs.begin())); // FIXME is there a better way?
 
 	if (!game->ProcessCommandText(-1, text)) {
-		logOutput.Print("<SkirmishAI: %s %s (team %d)>: %s", aiData->shortName.c_str(), aiData->version.c_str(), team, text);
+		LOG("<SkirmishAI: %s %s (team %d)>: %s",
+				aiData->shortName.c_str(), aiData->version.c_str(), team, text);
 	}
 }
 
 void CAICallback::SetLastMsgPos(const float3& pos)
 {
-	logOutput.SetLastMsgPos(pos);
+	eventHandler.LastMessagePosition(pos);
 }
 
 void CAICallback::AddNotification(const float3& pos, const float3& color, float alpha)
@@ -991,32 +999,32 @@ float CAICallback::GetGravity() const {
 
 const float* CAICallback::GetHeightMap()
 {
-	return readmap->centerheightmap;
+	return &readmap->GetCenterHeightMapSynced()[0];
 }
 
 const float* CAICallback::GetCornersHeightMap()
 {
-	return readmap->GetHeightmap();
+	return readmap->GetCornerHeightMapSynced();
 }
 
 float CAICallback::GetMinHeight()
 {
-	return readmap->minheight;
+	return readmap->initMinHeight;
 }
 
 float CAICallback::GetMaxHeight()
 {
-	return readmap->maxheight;
+	return readmap->initMaxHeight;
 }
 
 const float* CAICallback::GetSlopeMap()
 {
-	return readmap->slopemap;
+	return readmap->GetSlopeMapSynced();
 }
 
 const unsigned short* CAICallback::GetLosMap()
 {
-	return &loshandler->losMap[teamHandler->AllyTeam(team)].front();
+	return &loshandler->losMaps[teamHandler->AllyTeam(team)].front();
 }
 
 const unsigned short* CAICallback::GetRadarMap()
@@ -1031,7 +1039,7 @@ const unsigned short* CAICallback::GetJammerMap()
 
 const unsigned char* CAICallback::GetMetalMap()
 {
-	return readmap->metalMap->metalMap;
+	return &readmap->metalMap->metalMap[0];
 }
 
 float CAICallback::GetElevation(float x, float z)
@@ -1115,7 +1123,7 @@ void CAICallback::DrawUnit(const char* unitName, const float3& pos,
 	CUnitDrawer::TempDrawUnit tdu;
 	tdu.unitdef = unitDefHandler->GetUnitDefByName(unitName);
 	if (!tdu.unitdef) {
-		logOutput.Print("Unknown unit in CAICallback::DrawUnit %s", unitName);
+		LOG_L(L_WARNING, "Unknown unit in CAICallback::DrawUnit %s", unitName);
 		return;
 	}
 	tdu.pos = pos;
@@ -1140,8 +1148,8 @@ bool CAICallback::CanBuildAt(const UnitDef* unitDef, const float3& pos, int faci
 {
 	CFeature* blockingF = NULL;
 	BuildInfo bi(unitDef, pos, facing);
-	bi.pos = helper->Pos2BuildPos(bi);
-	const int canBuildState = uh->TestUnitBuildSquare(bi, blockingF, teamHandler->AllyTeam(team));
+	bi.pos = helper->Pos2BuildPos(bi, false);
+	const int canBuildState = uh->TestUnitBuildSquare(bi, blockingF, teamHandler->AllyTeam(team), false);
 	return (canBuildState != 0);
 }
 
@@ -1248,7 +1256,12 @@ int CAICallback::GetFeatures(int* featureIds, int featureIds_sizeMax)
 		assert(f);
 
 		if (f->IsInLosForAllyTeam(allyteam)) {
-			featureIds[featureIds_size++] = f->id;
+			// if it is NULL, the caller only wants to know
+			// the number of features
+			if (featureIds != NULL) {
+				featureIds[featureIds_size] = f->id;
+			}
+			featureIds_size++;
 		}
 	}
 
@@ -1269,7 +1282,12 @@ int CAICallback::GetFeatures(int* featureIds, int featureIds_sizeMax, const floa
 		assert(f);
 
 		if (f->IsInLosForAllyTeam(allyteam)) {
-			featureIds[featureIds_size++] = f->id;
+			// if it is NULL, the caller only wants to know
+			// the number of features
+			if (featureIds != NULL) {
+				featureIds[featureIds_size] = f->id;
+			}
+			featureIds_size++;
 		}
 	}
 
@@ -1392,13 +1410,13 @@ bool CAICallback::GetValue(int id, void *data)
 			return true;
 		}case AIVAL_LOCATE_FILE_R:{
 			std::string f((char*) data);
-			f = filesystem.LocateFile(f);
+			f = dataDirsAccess.LocateFile(f);
 			strcpy((char*) data, f.c_str());
-			return FileSystemHandler::IsReadableFile(f);
+			return FileSystem::IsReadableFile(f);
 		}case AIVAL_LOCATE_FILE_W:{
 			std::string f((char*) data);
-			std::string f_abs = filesystem.LocateFile(f, FileSystem::WRITE | FileSystem::CREATE_DIRS);
-			if (!FileSystemHandler::IsAbsolutePath(f_abs)) {
+			std::string f_abs = dataDirsAccess.LocateFile(f, FileQueryFlags::WRITE | FileQueryFlags::CREATE_DIRS);
+			if (!FileSystem::IsAbsolutePath(f_abs)) {
 				return false;
 			} else {
 				strcpy((char*) data, f.c_str());
@@ -1509,9 +1527,9 @@ int CAICallback::HandleCommand(int commandId, void* data)
 			AIHCPause* cmdData = (AIHCPause*) data;
 
 			net->Send(CBaseNetProtocol::Get().SendPause(gu->myPlayerNum, cmdData->enable));
-			logOutput.Print(
-					"Skirmish AI controlling team %i paused the game, reason: %s",
-					team, cmdData->reason != NULL ? cmdData->reason : "UNSPECIFIED");
+			LOG("Skirmish AI controlling team %i paused the game, reason: %s",
+					team,
+					cmdData->reason != NULL ? cmdData->reason : "UNSPECIFIED");
 
 			return 1;
 		} break;
@@ -1764,7 +1782,7 @@ float3 CAICallback::GetMousePos() {
 }
 
 
-int CAICallback::GetMapPoints(PointMarker* pm, int pm_sizeMax, bool includeAllies)
+void CAICallback::GetMapPoints(std::vector<PointMarker>& pm, int pm_sizeMax, bool includeAllies)
 {
 	verify();
 
@@ -1788,10 +1806,10 @@ int CAICallback::GetMapPoints(PointMarker* pm, int pm_sizeMax, bool includeAllie
 		}
 	}
 
-	return (inMapDrawer->GetPoints(pm, pm_sizeMax, includeTeamIDs));
+	inMapDrawer->GetPoints(pm, pm_sizeMax, includeTeamIDs);
 }
 
-int CAICallback::GetMapLines(LineMarker* lm, int lm_sizeMax, bool includeAllies)
+void CAICallback::GetMapLines(std::vector<LineMarker>& lm, int lm_sizeMax, bool includeAllies)
 {
 	verify();
 
@@ -1815,7 +1833,7 @@ int CAICallback::GetMapLines(LineMarker* lm, int lm_sizeMax, bool includeAllies)
 		}
 	}
 
-	return (inMapDrawer->GetLines(lm, lm_sizeMax, includeTeamIDs));
+	inMapDrawer->GetLines(lm, lm_sizeMax, includeTeamIDs);
 }
 
 

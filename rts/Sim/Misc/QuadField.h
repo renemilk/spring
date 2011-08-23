@@ -8,12 +8,12 @@
 #include <list>
 #include <boost/noncopyable.hpp>
 
-#include "creg/creg_cond.h"
-#include "float3.h"
+#include "System/creg/creg_cond.h"
+#include "System/float3.h"
 
 class CUnit;
-class CWorldObject;
 class CFeature;
+class CProjectile;
 class CSolidObject;
 
 class CQuadField : boost::noncopyable
@@ -43,23 +43,46 @@ public:
 	std::vector<CUnit*> GetUnits(const float3& pos, float radius);
 	/**
 	 * Returns all units within @c radius of @c pos,
-	 * and takes the 3D model radius of each unit into account.
+	 * takes the 3D model radius of each unit into account,
+ 	 * and performs the search within a sphere or cylinder depending on @c spherical
 	 */
 	std::vector<CUnit*> GetUnitsExact(const float3& pos, float radius, bool spherical = true);
 	/**
 	 * Returns all units within the rectangle defined by
-	 * mins and maxs, which extends infnitely along the y-axis.
+	 * mins and maxs, which extends infinitely along the y-axis
 	 */
 	std::vector<CUnit*> GetUnitsExact(const float3& mins, const float3& maxs);
 
+	/**
+	 * Returns all features within @c radius of @c pos,
+	 * and takes the 3D model radius of each feature into account
+	 */
 	std::vector<CFeature*> GetFeaturesExact(const float3& pos, float radius);
+	/**
+	 * Returns all features within @c radius of @c pos,
+	 * and performs the search within a sphere or cylinder depending on @c spherical
+	 */
+	std::vector<CFeature*> GetFeaturesExact(const float3& pos, float radius, bool spherical);
+	/**
+	 * Returns all features within the rectangle defined by
+	 * mins and maxs, which extends infinitely along the y-axis
+	 */
 	std::vector<CFeature*> GetFeaturesExact(const float3& mins, const float3& maxs);
+
+	std::vector<CProjectile*> GetProjectilesExact(const float3& pos, float radius);
+	std::vector<CProjectile*> GetProjectilesExact(const float3& mins, const float3& maxs);
+
 	std::vector<CSolidObject*> GetSolidsExact(const float3& pos, float radius);
 
 	void MovedUnit(CUnit* unit);
 	void RemoveUnit(CUnit* unit);
+
 	void AddFeature(CFeature* feature);
 	void RemoveFeature(CFeature* feature);
+
+	void MovedProjectile(CProjectile* projectile);
+	void AddProjectile(CProjectile* projectile);
+	void RemoveProjectile(CProjectile* projectile);
 
 	struct Quad {
 		CR_DECLARE_STRUCT(Quad);
@@ -67,10 +90,12 @@ public:
 		std::list<CUnit*> units;
 		std::vector< std::list<CUnit*> > teamUnits;
 		std::list<CFeature*> features;
+		std::list<CProjectile*> projectiles;
 	};
 
 	const Quad& GetQuad(int i) const {
-		assert(static_cast<unsigned>(i) < baseQuads.size());
+		assert(i >= 0);
+		assert(i < baseQuads.size());
 		return baseQuads[i];
 	}
 	const Quad& GetQuadAt(int x, int z) const {

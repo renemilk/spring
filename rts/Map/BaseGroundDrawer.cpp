@@ -1,11 +1,11 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "BaseGroundDrawer.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/SelectedUnits.h"
 #include "Game/UI/GuiHandler.h"
 #include "Ground.h"
@@ -17,15 +17,21 @@
 #include "Rendering/Env/ITreeDrawer.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/RadarHandler.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/FastMath.h"
 #include "System/myMath.h"
 
+CONFIG(float, GroundLODScaleReflection).defaultValue(1.0f);
+CONFIG(float, GroundLODScaleRefraction).defaultValue(1.0f);
+CONFIG(float, GroundLODScaleUnitReflection).defaultValue(1.0f);
+CONFIG(bool, HighResLos).defaultValue(false);
+CONFIG(int, ExtraTextureUpdateRate).defaultValue(45);
+
 CBaseGroundDrawer::CBaseGroundDrawer(void)
 {
-	LODScaleReflection = configHandler->Get("GroundLODScaleReflection", 1.0f);
-	LODScaleRefraction = configHandler->Get("GroundLODScaleRefraction", 1.0f);
-	LODScaleUnitReflection = configHandler->Get("GroundLODScaleUnitReflection", 1.0f);
+	LODScaleReflection = configHandler->GetFloat("GroundLODScaleReflection");
+	LODScaleRefraction = configHandler->GetFloat("GroundLODScaleRefraction");
+	LODScaleUnitReflection = configHandler->GetFloat("GroundLODScaleUnitReflection");
 
 	infoTexAlpha = 0.25f;
 	infoTex = 0;
@@ -42,7 +48,7 @@ CBaseGroundDrawer::CBaseGroundDrawer(void)
 	extraTexPal = NULL;
 	extractDepthMap = NULL;
 
-#ifdef USE_GML	
+#ifdef USE_GML
 	multiThreadDrawGroundShadow = false;
 	multiThreadDrawGround = false;
 #endif
@@ -53,8 +59,8 @@ CBaseGroundDrawer::CBaseGroundDrawer(void)
 
 	highResInfoTexWanted = false;
 
-	highResLosTex = configHandler->Get("HighResLos", false);
-	extraTextureUpdateRate = std::max(4, configHandler->Get("ExtraTextureUpdateRate", 45) - 1);
+	highResLosTex = configHandler->GetBool("HighResLos");
+	extraTextureUpdateRate = std::max(4, configHandler->GetInt("ExtraTextureUpdateRate") - 1);
 
 	jamColor[0] = (int)(losColorScale * 0.25f);
 	jamColor[1] = (int)(losColorScale * 0.0f);
@@ -73,6 +79,7 @@ CBaseGroundDrawer::CBaseGroundDrawer(void)
 	alwaysColor[2] = (int)(losColorScale * 0.25f);
 
 	heightLinePal = new CHeightLinePalette();
+	groundTextures = NULL;
 }
 
 
@@ -134,7 +141,7 @@ void CBaseGroundDrawer::DrawTrees(bool drawReflection) const
 
 
 
-//todo: this part of extra textures is a mess really ...
+// XXX this part of extra textures is a mess really ...
 void CBaseGroundDrawer::DisableExtraTexture()
 {
 	if (drawLineOfSight) {
@@ -176,7 +183,7 @@ void CBaseGroundDrawer::SetMetalTexture(const CMetalMap* map)
 		SetDrawMode(drawMetal);
 
 		highResInfoTexWanted = false;
-		extraTex = map->metalMap;
+		extraTex = &map->metalMap[0];
 		extraTexPal = map->metalPal;
 		extractDepthMap = &map->extractionMap[0];
 		updateTextureState = 0;
@@ -299,8 +306,8 @@ bool CBaseGroundDrawer::UpdateExtraTexture()
 		return true;
 	}
 
-	const unsigned short* myLos         = &loshandler->losMap[gu->myAllyTeam].front();
-	const unsigned short* myAirLos      = &loshandler->airLosMap[gu->myAllyTeam].front();
+	const unsigned short* myLos         = &loshandler->losMaps[gu->myAllyTeam].front();
+	const unsigned short* myAirLos      = &loshandler->airLosMaps[gu->myAllyTeam].front();
 	const unsigned short* myRadar       = &radarhandler->radarMaps[gu->myAllyTeam].front();
 	const unsigned short* myJammer      = &radarhandler->jammerMaps[gu->myAllyTeam].front();
 #ifdef SONAR_JAMMER_MAPS
@@ -365,14 +372,23 @@ bool CBaseGroundDrawer::UpdateExtraTexture()
 
 			case drawHeight: {
 				extraTexPal = heightLinePal->GetData();
+
+				//NOTE: the resolution of our PBO/ExtraTexture is gs->pwr2mapx * gs->pwr2mapy (we don't use it fully)
+				//      while the corner heightmap has (gs->mapx + 1) * (gs->mapy + 1).
+				//      So for the case POT(gs->mapx) == gs->mapx we would get a buffer overrun in our PBO
+				//      when iterating (gs->mapx + 1) * (gs->mapy + 1). So we just skip +1, it may give
+				//      semi incorrect results, but it is the easiest solution.
+				const float* heightMap = readmap->GetCornerHeightMapUnsynced();
+
 				for (int y = starty; y < endy; ++y) {
 					const int y_pwr2mapx = y * gs->pwr2mapx;
-					const int y_mapx     = y * gs->mapx;
-					for (int x = 0; x  < gs->mapx; ++x) {
-						const float height = readmap->centerheightmap[y_mapx + x];
+					const int y_mapx     = y * gs->mapxp1;
+
+					for (int x = 0; x < gs->mapx; ++x) {
+						const float height = heightMap[y_mapx + x];
 						const unsigned int value = (((unsigned int)(height * 8.0f)) % 255) * 3;
 						const int i = (y_pwr2mapx + x) * 4 - offset;
-						infoTexMem[i + COLOR_R] = 64 + (extraTexPal[value]     >> 1);
+						infoTexMem[i + COLOR_R] = 64 + (extraTexPal[value    ] >> 1);
 						infoTexMem[i + COLOR_G] = 64 + (extraTexPal[value + 1] >> 1);
 						infoTexMem[i + COLOR_B] = 64 + (extraTexPal[value + 2] >> 1);
 						infoTexMem[i + COLOR_A] = 255;
@@ -390,9 +406,11 @@ bool CBaseGroundDrawer::UpdateExtraTexture()
 				const int airSizeY = loshandler->airSizeY;
 				const int losMipLevel = loshandler->losMipLevel + lowRes;
 				const int airMipLevel = loshandler->airMipLevel + lowRes;
+
 				if (drawRadarAndJammer) {
 					const int rxsize = radarhandler->xsize;
 					const int rzsize = radarhandler->zsize;
+
 					for (int y = starty; y < endy; ++y) {
 						for (int x = 0; x < endx; ++x) {
 							int totalLos = 255;
@@ -402,7 +420,7 @@ bool CBaseGroundDrawer::UpdateExtraTexture()
 								totalLos = inLos + inAir;
 							}
 #ifdef SONAR_JAMMER_MAPS
-							const bool useRadar = (ground->GetHeightReal(xPos, zPos) >= 0.0f);
+							const bool useRadar = (ground->GetHeightReal(xPos, zPos, false) >= 0.0f);
 							const unsigned short* radarMap  = useRadar ? myRadar  : mySonar;
 							const unsigned short* jammerMap = useRadar ? myJammer : mySonarJammer;
 #else
@@ -468,7 +486,7 @@ bool CBaseGroundDrawer::UpdateExtraTexture()
 			glGenTextures(1,&infoTex);
 			glBindTexture(GL_TEXTURE_2D, infoTex);
 
-			//todo: maybe use GL_RGB5 as internalformat?
+			// XXX maybe use GL_RGB5 as internalformat?
 			glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
 			glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);

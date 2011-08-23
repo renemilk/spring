@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------
 // AAI
 //
-// A skirmish AI for the TA Spring engine.
+// A skirmish AI for the Spring engine.
 // Copyright Alexander Seizinger
 //
 // Released under GPL license: see LICENSE.html for more information.
@@ -50,8 +50,8 @@ public:
 	void EnemyEnterRadar(int enemy);				//called when an enemy enters radar coverage (not called if enemy go directly from not known -> los)
 	void EnemyLeaveRadar(int enemy);				//called when an enemy leaves radar coverage (not called if enemy go directly from inlos -> now known)
 
-	void GotChatMessage(const char* msg,int player);	//called when someone writes a chat msg
-	void GotLuaMessage(const char* inData, const char** outData) {}
+	void RecvChatMessage(const char* msg,int player) {}	//called when someone writes a chat msg
+	void RecvLuaMessage(const char* inData, const char** outData) {}
 
 	void EnemyDamaged(int damaged,int attacker,float damage,float3 dir);	//called when an enemy inside los or radar is damaged
 	void EnemyDestroyed(int enemy, int attacker);

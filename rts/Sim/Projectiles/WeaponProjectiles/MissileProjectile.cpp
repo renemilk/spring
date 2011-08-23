@@ -1,14 +1,14 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Game/Camera.h"
 #include "Game/GameHelper.h"
+#include "Game/TraceRay.h"
 #include "Map/Ground.h"
 #include "MissileProjectile.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Models/3DModel.h"
@@ -21,7 +21,6 @@
 #include "System/Matrix44f.h"
 #include "System/myMath.h"
 #include "System/Sync/SyncTracer.h"
-#include "System/GlobalUnsynced.h"
 
 const float CMissileProjectile::SMOKE_TIME = 60.0f;
 
@@ -94,7 +93,7 @@ CMissileProjectile::CMissileProjectile(
 	SetRadius(0.0f);
 
 	if (weaponDef) {
-		model = LoadModel(weaponDef);
+		model = weaponDef->LoadModel();
 		if (model) {
 			SetRadius(model->radius);
 		}
@@ -151,17 +150,6 @@ void CMissileProjectile::DependentDied(CObject* o)
 
 void CMissileProjectile::Collision()
 {
-	const float h = ground->GetHeightReal(pos.x, pos.z);
-
-	if (weaponDef->waterweapon && h < pos.y) {
-		// let waterweapons travel in water
-		return;
-	}
-
-	if (h > pos.y && fabs(speed.y) > 0.001f) {
-		pos -= speed * std::min(1.0f, (float)((h - pos.y) / fabs(speed.y)));
-	}
-
 	if (weaponDef->visuals.smokeTrail) {
 		new CSmokeTrailProjectile(pos, oldSmoke, dir, oldDir, owner(), false, true, 7, SMOKE_TIME, 0.6f, drawTrail, 0, weaponDef->visuals.texture2);
 	}

@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "InMapDrawView.h"
 #include "Rendering/Colors.h"
@@ -18,7 +17,7 @@ CInMapDrawView* inMapDrawerView = NULL;
 
 
 /**
- * @param a how far on the way between x and y [0.0f, 1.0f]
+ * how far on the way between x and y [0.0f, 1.0f]
  */
 static inline unsigned char smoothStep(int x, int y, int a) {
 	return (unsigned char)((x * (1.0f - a)) + (y * a));

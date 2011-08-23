@@ -1,16 +1,16 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include <vector>
 #include <SDL.h>
 
 #include "Rendering/GL/myGL.h"
 #include "LoadScreen.h"
+#include "ExternalAI/SkirmishAIHandler.h"
 #include "Game.h"
 #include "GameVersion.h"
+#include "Game/GlobalUnsynced.h"
 #include "PlayerHandler.h"
-#include "ExternalAI/SkirmishAIHandler.h"
 #include "Game/UI/MouseHandler.h"
 #include "Game/UI/InputReceiver.h"
 #include "Map/MapInfo.h"
@@ -19,12 +19,12 @@
 #include "Rendering/Textures/Bitmap.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Path/IPathManager.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
 #include "System/Exceptions.h"
-#include "System/FPUCheck.h"
-#include "System/GlobalUnsynced.h"
+#include "System/Sync/FPUCheck.h"
 #include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/NetProtocol.h"
 #include "System/FileSystem/FileHandler.h"
 #include "System/Platform/Watchdog.h"
@@ -35,6 +35,8 @@
 	#include "System/Sound/EFX.h"
 	#include "System/Sound/EFXPresets.h"
 #endif
+
+CONFIG(bool, LoadingMT).defaultValue(true);
 
 CLoadScreen* CLoadScreen::singleton = NULL;
 
@@ -67,7 +69,7 @@ void CLoadScreen::Init()
 #ifdef HEADLESS
 	mt_loading = false;
 #else
-	mt_loading = configHandler->Get("LoadingMT", true);
+	mt_loading = configHandler->GetBool("LoadingMT");
 #endif
 
 	//! Create a thread during the loading that pings the host/server, so it knows that this client is still alive/loading
@@ -96,16 +98,14 @@ void CLoadScreen::Init()
 		if (mt_loading)
 			gameLoadThread = new COffscreenGLThread( boost::bind(&CGame::LoadGame, game, mapName) );
 
-	} catch (opengl_error& gle) {
-		//! Offscreen GL Context creation failed,
-		//! fallback to singlethreaded loading.
-		logOutput.Print(std::string(gle.what()));
-		logOutput.Print("Fallback to singlethreaded loading.");
+	} catch (const opengl_error& gle) {
+		LOG_L(L_WARNING, "Offscreen GL Context creation failed, "
+				"falling back to single-threaded loading. The problem was: %s",
+				gle.what());
 		mt_loading = false;
 	}
 
 	if (!mt_loading) {
-		Draw();
 		game->LoadGame(mapName);
 	}
 }
@@ -113,6 +113,10 @@ void CLoadScreen::Init()
 
 CLoadScreen::~CLoadScreen()
 {
+	// at this point, the thread running CGame::LoadGame
+	// has finished and deregistered itself from WatchDog
+	if (mt_loading && gameLoadThread)
+		gameLoadThread->Join();
 	delete gameLoadThread; gameLoadThread = NULL;
 
 	if (net)
@@ -120,8 +124,6 @@ CLoadScreen::~CLoadScreen()
 	if (netHeartbeatThread)
 		netHeartbeatThread->join();
 	delete netHeartbeatThread; netHeartbeatThread = NULL;
-
-	Watchdog::ClearTimer();
 
 	if (!gu->globalQuit) {
 		//! sending your playername to the server indicates that you are finished loading
@@ -236,8 +238,6 @@ bool CLoadScreen::Update()
 
 bool CLoadScreen::Draw()
 {
-	Watchdog::ClearTimer();
-	
 	//! Limit the Frames Per Second to not lock a singlethreaded CPU from loading the game
 	if (mt_loading) {
 		spring_time now = spring_gettime();
@@ -316,7 +316,7 @@ bool CLoadScreen::Draw()
 
 void CLoadScreen::SetLoadMessage(const std::string& text, bool replace_lastline)
 {
-	Watchdog::ClearTimer();
+	Watchdog::ClearTimer(WDT_LOAD);
 
 	boost::recursive_mutex::scoped_lock lck(mutex);
 
@@ -329,7 +329,7 @@ void CLoadScreen::SetLoadMessage(const std::string& text, bool replace_lastline)
 	}
 	curLoadMessage = text;
 
-	logOutput.Print(text);
+	LOG("%s", text.c_str());
 	logOutput.Flush();
 
 	//! Check the FPU state (needed for synced computations),

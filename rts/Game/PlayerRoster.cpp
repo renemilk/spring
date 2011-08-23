@@ -1,16 +1,16 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
-
-#include <assert.h>
+#include "System/mmgr.h"
 
 #include "PlayerRoster.h"
 #include "PlayerHandler.h"
+#include "Game/GlobalUnsynced.h"
 #include "Sim/Misc/TeamHandler.h"
-#include "Util.h"
 #include "Sim/Misc/GlobalSynced.h"
-#include "GlobalUnsynced.h"
+#include "System/Util.h"
+
+#include <cassert>
+#include <cstring>
 
 static int CompareAllies     (const void* a, const void* b);
 static int CompareTeamIDs    (const void* a, const void* b);

@@ -107,7 +107,7 @@ private:
 	 */
 	void KickPlayer(const int playerNum);
 
-	unsigned BindConnection(std::string name, const std::string& passwd, const std::string& version, bool isLocal, boost::shared_ptr<netcode::CConnection> link, bool reconnect = false);
+	unsigned BindConnection(std::string name, const std::string& passwd, const std::string& version, bool isLocal, boost::shared_ptr<netcode::CConnection> link, bool reconnect = false, int netloss = 0);
 
 	void CheckForGameStart(bool forced=false);
 	void StartGame();
@@ -123,7 +123,7 @@ private:
 	std::string GetPlayerNames(const std::vector<int>& indices) const;
 
 	/// read data from demo and send it to clients
-	void SendDemoData(const bool skipping = false);
+	bool SendDemoData(int targetFrameNum);
 
 	void Broadcast(boost::shared_ptr<const netcode::RawPacket> packet);
 
@@ -133,7 +133,7 @@ private:
 	 * If you are watching a demo, this will push out all data until
 	 * targetFrame to all clients
 	 */
-	void SkipTo(int targetFrame);
+	void SkipTo(int targetFrameNum);
 
 	void Message(const std::string& message, bool broadcast = true);
 	void PrivateMessage(int playerNum, const std::string& message);

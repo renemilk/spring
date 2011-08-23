@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <sstream>
 #include <string>
 
@@ -55,8 +54,6 @@
 
 #endif
 
-using namespace std;
-
 typedef void (WINAPI *PGNSI)(LPSYSTEM_INFO);
 typedef BOOL (WINAPI *PGPI)(DWORD, DWORD, DWORD, DWORD, PDWORD);
 
@@ -80,7 +77,7 @@ std::string GetOSDisplayString()
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 
     if ( !(bOsVersionInfoEx = GetVersionEx ((OSVERSIONINFO *) &osvi)) )
-        return string("error getting Windows version");
+		return std::string("error getting Windows version");
 
     // Call GetNativeSystemInfo if supported or GetSystemInfo otherwise.
 
@@ -94,7 +91,7 @@ std::string GetOSDisplayString()
     if ( VER_PLATFORM_WIN32_NT==osvi.dwPlatformId &&
             osvi.dwMajorVersion > 4 )
     {
-		ostringstream oss;
+		std::ostringstream oss;
         oss << "Microsoft ";
 
         // Test for the specific product.
@@ -266,7 +263,7 @@ std::string GetOSDisplayString()
 
     else
     {
-        return string("unsupported version of Windows");
+        return std::string("unsupported version of Windows");
     }
 }
 
@@ -274,7 +271,7 @@ std::string GetOSDisplayString()
 // this tries to read info about the CPU and available memory
 std::string GetHardwareInfoString()
 {
-    ostringstream oss;
+	std::ostringstream oss;
 
     unsigned char regbuf[200];
     DWORD regLength=sizeof(regbuf);

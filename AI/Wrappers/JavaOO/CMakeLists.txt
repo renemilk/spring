@@ -36,6 +36,7 @@ if    (BUILD_${myName}_AIWRAPPER)
 	GetLastPathPart(dirName ${myDir})
 	set(myName       "${dirName}")
 	set(myTarget     "${myName}-AIWrapper")
+	set(myGenTarget  "${myTarget}-generateSources")
 	set(myJavaTarget "${myTarget}-java")
 	set(myPomTarget  "${myTarget}-pom")
 	set(myMavenInstallTarget "${myTarget}-mavenInstall")
@@ -68,6 +69,7 @@ if    (BUILD_${myName}_AIWRAPPER)
 	SetGlobal(${myName}_AIWRAPPER_JAR_SRC       "${myBuildDir}/${mySrcJarFile}")
 	SetGlobal(${myName}_AIWRAPPER_JAR_CLASSPATH "${myJLibs}${PATH_DELIM_H}${${myName}_AIWRAPPER_JAR_BIN}")
 	SetGlobal(${myName}_AIWRAPPER_TARGET        "${myTarget}")
+	SetGlobal(${myName}_AIWRAPPER_TARGET_MVN_INSTALL "${myMavenInstallTarget}")
 	SetGlobal(SOURCE_ROOT_${myName}_AIWRAPPER   "${myDir}")
 	SetGlobal(BUILD_ROOT_${myName}_AIWRAPPER    "${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -256,7 +258,8 @@ if    (BUILD_${myName}_AIWRAPPER)
 			"${commonAwkScriptsDir}/commonDoc.awk"
 			"${commonAwkScriptsDir}/commonOOCallback.awk"
 			"${myBinDir}/wrappCallback.awk"
-			"${jAiIntJavaGeneratedSourceDir}/${myParentPkg}/AICallback.java"
+			# Handled through a target level dependency, see below
+			#"${jAiIntJavaGeneratedSourceDir}/${myParentPkg}/AICallback.java"
 		WORKING_DIRECTORY
 			"${myBinDir}"
 		COMMENT
@@ -286,6 +289,10 @@ if    (BUILD_${myName}_AIWRAPPER)
 			"  ${myTarget}: Generating event sources" VERBATIM
 		)
 
+	add_custom_target(${myGenTarget} DEPENDS ${myGeneratedSources})
+	add_dependencies(${myGenTarget} ${Java_AIINTERFACE_TARGET_GENERATE_SOURCES}) # for AICallback.java
+	add_dependencies(generateSources ${myGenTarget})
+
 
 	# Build the jars
 	# --------------
@@ -309,6 +316,7 @@ if    (BUILD_${myName}_AIWRAPPER)
 			"-E" "make_directory" "${myJavaBuildDir}"
 		COMMAND "${JAVA_COMPILE}"
 			"${JAVA_COMPILE_FLAG_CONDITIONAL}"
+			"-Xlint:deprecation"
 			"-cp" "${myClassPath}"
 			"-d" "${myJavaBuildDir}"
 			"@${mySrcArgFile}"
@@ -331,7 +339,7 @@ if    (BUILD_${myName}_AIWRAPPER)
 			"${myBuildDir}/${mySrcJarFile}"
 		COMMAND "${JAVA_ARCHIVE}" ARGS
 			"cf" "${${myName}_AIWRAPPER_JAR_SRC}"
-			"-C" "${mySourceDir}" "${myPkgFirstPart}"
+			"-C" "${mySourceDir}"          "${myPkgFirstPart}"
 		COMMAND "${JAVA_ARCHIVE}" ARGS
 			"uf" "${${myName}_AIWRAPPER_JAR_SRC}"
 			"-C" "${myGeneratedSourceDir}" "${myPkgFirstPart}"
@@ -345,8 +353,9 @@ if    (BUILD_${myName}_AIWRAPPER)
 		)
 
 	# This sets the version in pom.xml
-	# as we have no separate version for the wrapper:
-	set(myMavenProperties "-DmyVersion=${Java_AIINTERFACE_VERS}")
+	# as we have no separate version for the wrapper,
+	# we use the one from the interrface
+	set(myMavenProperties "-Dmy.version=${Java_AIINTERFACE_VERS}")
 	add_custom_command(
 		OUTPUT
 			"${myBuildDir}/pom-generated.xml"
@@ -370,26 +379,25 @@ if    (BUILD_${myName}_AIWRAPPER)
 
 	add_custom_target(${myTarget} ALL)
 
-	IsMavenInstalled(isMavenInstalled)
-	if    (isMavenInstalled)
+	Find_Package(Maven)
+	if    (MAVEN_FOUND)
 		# This is required because the local Maven install does not create a
 		# file (whichs path we could know), and thus we would not be able to
 		# create a nice dependency chain without this.
 		set(myMavenInstallStubFile "${myBuildDir}/mavenInstallStub.txt")
 		set_source_files_properties("${myMavenInstallStubFile}" PROPERTIES GENERATED TRUE)
-		set_source_files_properties("${Java_AIINTERFACE_MVN_INST_STUB_FILE}" PROPERTIES GENERATED TRUE)
 		add_custom_command(
 			OUTPUT
 				"${myMavenInstallStubFile}"
-			COMMAND "mvn"
-				"install:install-file"
+			COMMAND "${MVN_BIN}"
+				${MVN_ATTRIBUTES_DEFAULT}
 				"-DpomFile=${myBuildDir}/pom-generated.xml"
 				"-Dfile=${myBuildDir}/${myBinJarFile}"
 				"-Dsources=${myBuildDir}/${mySrcJarFile}"
+				"install:install-file"
 			COMMAND "${CMAKE_COMMAND}"
 				"-E" "touch" "${myMavenInstallStubFile}"
 			DEPENDS
-				"${Java_AIINTERFACE_MVN_INST_STUB_FILE}"
 				# We have to handle these through target level dependencies, or
 				# else their generating custom commands may be executed multiple
 				# times.
@@ -405,10 +413,10 @@ if    (BUILD_${myName}_AIWRAPPER)
 			DEPENDS
 				"${myMavenInstallStubFile}"
 			)
-		add_dependencies(${myMavenInstallTarget} ${myJavaTarget} ${myPomTarget})
+		add_dependencies(${myMavenInstallTarget} ${myJavaTarget} ${myPomTarget} ${Java_AIINTERFACE_TARGET_MVN_INSTALL})
 		add_dependencies(${myTarget} ${myMavenInstallTarget})
-	else  (isMavenInstalled)
+	else  (MAVEN_FOUND)
 		add_dependencies(${myTarget} ${myJavaTarget})
-	endif (isMavenInstalled)
+	endif (MAVEN_FOUND)
 
 endif (BUILD_${myName}_AIWRAPPER)

@@ -52,7 +52,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "SceneCombiner.h"
 #include "StandardShapes.h"
-
+#include "Importer.h"
 
 // We need boost::common_factor to compute the lcm/gcd of a number
 #include <boost/math/common_factor_rt.hpp>
@@ -243,7 +243,7 @@ void IRRImporter::CopyMaterial(std::vector<aiMaterial*>& materials,
 {
 	if (inmaterials.empty())	{
 		// Do we have a default material? If not we need to create one
-		if (0xffffffff == defMatIdx)
+		if (UINT_MAX == defMatIdx)
 		{
 			defMatIdx = (unsigned int)materials.size();
 			MaterialHelper* mat = new MaterialHelper();
@@ -457,7 +457,7 @@ void IRRImporter::ComputeAnimations(Node* root, aiNode* real, std::vector<aiNode
 					key.mTime = i * tdelta;
 
 					const float t = (float) ( in.speed * key.mTime );
-					key.mValue = in.circleCenter  + in.circleRadius * ((vecU*::cos(t)) + (vecV*::sin(t)));
+					key.mValue = in.circleCenter  + in.circleRadius * ((vecU*math::cos(t)) + (vecV*math::sin(t)));
 				}
 
 				// This animation is repeated and repeated ...
@@ -1073,7 +1073,7 @@ void IRRImporter::InternReadFile( const std::string& pFile,
 
 										// and parse its properties
 										key.mValue = prop.value;
-										key.mTime  = strtol10(&prop.name[5]);
+										key.mTime  = strtoul10(&prop.name[5]);
 									}
 								}
 								else if (curAnim->type == Animator::FLY_CIRCLE)	{
@@ -1397,7 +1397,7 @@ void IRRImporter::InternReadFile( const std::string& pFile,
 	/* Now process our scenegraph recursively: generate final
 	 * meshes and generate animation channels for all nodes.
 	 */
-	unsigned int defMatIdx = 0xffffffff;
+	unsigned int defMatIdx = UINT_MAX;
 	GenerateGraph(root,tempScene->mRootNode, tempScene,
 		batch, meshes, anims, attach, materials, defMatIdx);
 

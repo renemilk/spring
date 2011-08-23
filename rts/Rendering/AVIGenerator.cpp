@@ -1,22 +1,19 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #if       defined AVI_CAPTURING
-#ifdef _MSC_VER
-#include "StdAfx.h"
-#endif
 #include "AVIGenerator.h"
 
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/myGL.h"
 #include "Game/GameVersion.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/SpringApp.h"
 
 #include <windows.h>
 
 #include <boost/bind.hpp>
 #include <cassert>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 #pragma message("Adding library: vfw32.lib")
@@ -145,7 +142,7 @@ CAVIGenerator::~CAVIGenerator() {
 
 
 	ReleaseAVICompressionEngine();
-	logOutput.Print(std::string("Finished writing avi file, ") + fileName);
+	LOG("Finished writing avi file %s", fileName.c_str());
 
 	// Just checking that all allocated ressources have been released.
 	assert(AVIThread == NULL);
@@ -420,7 +417,7 @@ void CAVIGenerator::AVIGeneratorThreadProc() {
 		{
 			boost::mutex::scoped_lock lock(AVIMutex);
 			if (encoderError) {
-				logOutput.Print("The avi generator terminated unexpectedly!");
+				LOG_L(L_ERROR, "The avi generator terminated unexpectedly!");
 				quitAVIgen = true;
 				// Do not let the main thread wait, as the encoder will not
 				// process and free the remaining content in imageBuffers.

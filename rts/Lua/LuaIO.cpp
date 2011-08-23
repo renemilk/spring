@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include <stdio.h>
 #include <errno.h>
@@ -12,7 +11,7 @@
 #include <string>
 using std::string;
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaIO.h"
 
@@ -20,8 +19,9 @@ using std::string;
 #include "LuaHandle.h"
 #endif // !defined UNITSYNC && !defined DEDICATED && !defined BUILDING_AI
 #include "LuaInclude.h"
-#include "FileSystem/FileSystem.h"
-#include "Util.h"
+#include "System/FileSystem/DataDirsAccess.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/Util.h"
 
 
 /******************************************************************************/
@@ -66,7 +66,7 @@ bool LuaIO::SafeExecPath(const string& path)
 
 bool LuaIO::SafeReadPath(const string& path)
 {
-	return filesystem.InReadDir(path);
+	return dataDirsAccess.InReadDir(path);
 }
 
 
@@ -81,13 +81,13 @@ bool LuaIO::SafeWritePath(const string& path)
 #endif // !defined UNITSYNC && !defined DEDICATED && !defined BUILDING_AI
 	const size_t numExtensions = 5;
 	const char* exeFiles[numExtensions] = {"exe", "dll", "so", "bat", "com"};
-	const string ext = filesystem.GetExtension(path);
+	const string ext = FileSystem::GetExtension(path);
 	for (size_t i = 0; i < numExtensions; ++i)
 	{
 		if (ext == exeFiles[i])
 			return false;
 	}
-	return filesystem.InWriteDir(path, prefix);
+	return dataDirsAccess.InWriteDir(path, prefix);
 }
 
 

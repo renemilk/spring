@@ -1,14 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "OverviewController.h"
 
 #include "Map/Ground.h"
 #include "Game/UI/MiniMap.h"
 #include "Game/UI/MouseHandler.h"
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
 
 COverviewController::COverviewController()
 {
@@ -38,7 +37,7 @@ float3 COverviewController::GetPos()
 	pos.x = gs->mapx * 4.0f;
 	pos.z = gs->mapy * 4.0f;
 	const float height = std::max(pos.x / globalRendering->aspectRatio, pos.z);
-	pos.y = ground->GetHeightAboveWater(pos.x, pos.z) + (2.5f * height);
+	pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false) + (2.5f * height);
 	return pos;
 }
 
@@ -53,9 +52,9 @@ void COverviewController::SetPos(const float3& newPos)
 
 float3 COverviewController::SwitchFrom() const
 {
-	float3 dir=mouse->dir;
-	float length=ground->LineGroundCol(pos,pos+dir*50000);
-	float3 rpos=pos+dir*length;
+	float3 dir = mouse->dir;
+	float length = ground->LineGroundCol(pos, pos + dir * 50000, false);
+	float3 rpos = pos + dir * length;
 
 	if (!globalRendering->dualScreenMode) {
 		minimap->SetMinimized(minimizeMinimap);
@@ -67,7 +66,7 @@ float3 COverviewController::SwitchFrom() const
 void COverviewController::SwitchTo(bool showText)
 {
 	if (showText) {
-		logOutput.Print("Switching to Overview style camera");
+		LOG("Switching to Overview style camera");
 	}
 
 	if (!globalRendering->dualScreenMode) {

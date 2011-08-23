@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include "FeatureHandler.h"
 
 #include "Game/Game.h"
@@ -14,9 +13,9 @@
 #include "System/creg/STL_List.h"
 #include "System/EventHandler.h"
 #include "System/Exceptions.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/TimeProfiler.h"
-#include "creg/STL_Set.h"
+#include "System/creg/STL_Set.h"
 
 
 using std::list;
@@ -123,7 +122,7 @@ FeatureDef* CFeatureHandler::CreateFeatureDef(const LuaTable& fdTable, const str
 	fd->burnable      =  fdTable.GetBool("flammable",       false);
 	fd->destructable  = !fdTable.GetBool("indestructible",  false);
 	fd->reclaimable   =  fdTable.GetBool("reclaimable",     fd->destructable);
-	fd->autoreclaim   =  fdTable.GetBool("autoreclaimable", fd->autoreclaim);
+	fd->autoreclaim   =  fdTable.GetBool("autoreclaimable", fd->reclaimable);
 	fd->resurrectable =  fdTable.GetInt("resurrectable",    -1);
 	fd->geoThermal    =  fdTable.GetBool("geoThermal",      false);
 
@@ -170,13 +169,12 @@ FeatureDef* CFeatureHandler::CreateFeatureDef(const LuaTable& fdTable, const str
 
 	fd->upright = fdTable.GetBool("upright", false);
 
-	// our resolution is double TA's
-	fd->xsize = fdTable.GetInt("footprintX", 1) * 2;
-	fd->zsize = fdTable.GetInt("footprintZ", 1) * 2;
+	fd->xsize = std::max(1 * 2, fdTable.GetInt("footprintX", 1) * 2);
+	fd->zsize = std::max(1 * 2, fdTable.GetInt("footprintZ", 1) * 2);
 
+	const float minMass = 1.0f;
 	const float defMass = (fd->metal * 0.4f) + (fd->maxHealth * 0.1f);
-	fd->mass = fdTable.GetFloat("mass", defMass);
-	fd->mass = std::max(0.001f, fd->mass);
+	fd->mass = std::max(minMass, fdTable.GetFloat("mass", defMass));
 
 	// custom parameters table
 	fdTable.SubTable("customParams").GetMap(fd->customParams);
@@ -243,8 +241,10 @@ const FeatureDef* CFeatureHandler::GetFeatureDef(string name, const bool showErr
 		return fi->second;
 	}
 
-	if (showError)
-		logOutput.Print("[%s] could not find FeatureDef \"%s\"", __FUNCTION__, name.c_str());
+	if (showError) {
+		LOG_L(L_ERROR, "[%s] could not find FeatureDef \"%s\"",
+				__FUNCTION__, name.c_str());
+	}
 
 	return NULL;
 }
@@ -276,7 +276,8 @@ void CFeatureHandler::LoadFeaturesFromMap(bool onlyCreateDefs)
 				AddFeatureDef(name, CreateDefaultGeoFeatureDef(name));
 			}
 			else {
-				logOutput.Print("[%s] unknown map feature type \"%s\"", __FUNCTION__, name.c_str());
+				LOG_L(L_ERROR, "[%s] unknown map feature type \"%s\"",
+						__FUNCTION__, name.c_str());
 			}
 		}
 	}
@@ -297,7 +298,7 @@ void CFeatureHandler::LoadFeaturesFromMap(bool onlyCreateDefs)
 			map<string, const FeatureDef*>::iterator def = featureDefs.find(name);
 
 			if (def == featureDefs.end()) {
-				logOutput.Print("Unknown feature named '%s'", name.c_str());
+				LOG_L(L_ERROR, "Unknown feature named '%s'", name.c_str());
 				continue;
 			}
 
@@ -318,13 +319,17 @@ int CFeatureHandler::AddFeature(CFeature* feature)
 {
 	if (freeIDs.empty()) {
 		// alloc n new ids and randomly insert to freeIDs
-		const unsigned n = 100;
+		static const unsigned n = 100;
+
 		std::vector<int> newIds(n);
+
 		for (unsigned i = 0; i < n; ++i)
 			newIds[i] = i + features.size();
+
+		features.resize(features.size() + n, NULL);
+
 		SyncedRNG rng;
 		std::random_shuffle(newIds.begin(), newIds.end(), rng); // synced
-		features.resize(features.size()+n, 0);
 		std::copy(newIds.begin(), newIds.end(), std::back_inserter(freeIDs));
 	}
 	

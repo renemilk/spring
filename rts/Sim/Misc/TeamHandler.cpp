@@ -1,18 +1,16 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "TeamHandler.h"
 
 #include <cstring>
 
 #include "Game/GameSetup.h"
 #include "Lua/LuaGaia.h"
+#include "System/mmgr.h"
 #include "Sim/Misc/GlobalConstants.h"
-#include "mmgr.h"
-#include "Util.h"
-#include "LogOutput.h"
-#include "GlobalUnsynced.h"
-#include "GlobalSynced.h"
+#include "Sim/Misc/GlobalSynced.h"
+#include "System/Util.h"
+
 
 CR_BIND(CTeamHandler, );
 
@@ -44,11 +42,12 @@ CTeamHandler::~CTeamHandler()
 
 void CTeamHandler::LoadFromSetup(const CGameSetup* setup)
 {
-	assert(setup->teamStartingData.size() >          0);
+	assert(!setup->teamStartingData.empty());
 	assert(setup->teamStartingData.size() <= MAX_TEAMS);
 	assert(setup->allyStartingData.size() <= MAX_TEAMS);
 
 	teams.resize(setup->teamStartingData.size());
+	allyTeams = setup->allyStartingData;
 
 	for (size_t i = 0; i < teams.size(); ++i) {
 		// TODO: this loop body could use some more refactoring
@@ -57,10 +56,10 @@ void CTeamHandler::LoadFromSetup(const CGameSetup* setup)
 		*team = setup->teamStartingData[i];
 		team->teamNum = i;
 		team->maxUnits = std::min(setup->maxUnits, int(MAX_UNITS / teams.size()));
-		SetAllyTeam(i, team->teamAllyteam);
-	}
 
-	allyTeams = setup->allyStartingData;
+		assert(team->teamAllyteam >=                0);
+		assert(team->teamAllyteam <  allyTeams.size());
+	}
 
 	if (gs->useLuaGaia) {
 		// Gaia adjustments

@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <string>
 #include <SDL.h>
 
@@ -9,12 +8,12 @@
 #include <windef.h>
 #endif
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include "myGL.h"
 #include "VertexArray.h"
 #include "VertexArrayRange.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Exceptions.h"
 #include "System/TimeProfiler.h"
 #include "System/FileSystem/FileHandler.h"
@@ -23,14 +22,15 @@
 
 static CVertexArray* vertexArray1 = NULL;
 static CVertexArray* vertexArray2 = NULL;
-static CVertexArray* currentVertexArray = NULL;
 
 #ifdef USE_GML
 static CVertexArray vertexArrays1[GML_MAX_NUM_THREADS];
 static CVertexArray vertexArrays2[GML_MAX_NUM_THREADS];
 static CVertexArray* currentVertexArrays[GML_MAX_NUM_THREADS];
+#else
+static CVertexArray* currentVertexArray = NULL;
 #endif
-//BOOL gmlVertexArrayEnable=0;
+//BOOL gmlVertexArrayEnable = 0;
 /******************************************************************************/
 /******************************************************************************/
 
@@ -38,17 +38,17 @@ CVertexArray* GetVertexArray()
 {
 #ifdef USE_GML // each thread gets its own array to avoid conflicts
 	int thread=gmlThreadNumber;
-	if(currentVertexArrays[thread]==&vertexArrays1[thread]){
-		currentVertexArrays[thread]=&vertexArrays2[thread];
+	if (currentVertexArrays[thread] == &vertexArrays1[thread]) {
+		currentVertexArrays[thread] = &vertexArrays2[thread];
 	} else {
-		currentVertexArrays[thread]=&vertexArrays1[thread];
+		currentVertexArrays[thread] = &vertexArrays1[thread];
 	}
 	return currentVertexArrays[thread];
 #else
-	if(currentVertexArray==vertexArray1){
-		currentVertexArray=vertexArray2;
+	if (currentVertexArray == vertexArray1){
+		currentVertexArray = vertexArray2;
 	} else {
-		currentVertexArray=vertexArray1;
+		currentVertexArray = vertexArray1;
 	}
 	return currentVertexArray;
 #endif
@@ -60,22 +60,22 @@ CVertexArray* GetVertexArray()
 void PrintAvailableResolutions()
 {
 	// Get available fullscreen/hardware modes
-	SDL_Rect **modes=SDL_ListModes(NULL, SDL_FULLSCREEN|SDL_OPENGL);
-	if (modes == (SDL_Rect **)0) {
-		logOutput.Print("Supported Video modes: No modes available!\n");
-	}else if (modes == (SDL_Rect **)-1) {
-		logOutput.Print("Supported Video modes: All modes available.\n");
-	}else{
+	SDL_Rect** modes = SDL_ListModes(NULL, SDL_FULLSCREEN|SDL_OPENGL);
+	if (modes == (SDL_Rect**)0) {
+		LOG("Supported Video modes: No modes available!");
+	} else if (modes == (SDL_Rect**)-1) {
+		LOG("Supported Video modes: All modes available.");
+	} else {
 		char buffer[1024];
 		unsigned char n = 0;
-		for(int i=0;modes[i];++i) {
+		for (int i = 0; modes[i]; ++i) {
 			n += SNPRINTF(&buffer[n], 1024-n, "%dx%d, ", modes[i]->w, modes[i]->h);
 		}
 		// remove last comma
-		if (n>=2) {
-			buffer[n-2] = '\0';
+		if (n >= 2) {
+			buffer[n - 2] = '\0';
 		}
-		logOutput.Print("Supported Video modes: %s\n",buffer);
+		LOG("Supported Video modes: %s", buffer);
 	}
 }
 
@@ -152,7 +152,9 @@ void _APIENTRY OpenGLDebugMessageCallback(GLenum source, GLenum type, GLuint id,
 			severityStr = "unknown";
 	}
 
-	logOutput.Print("OpenGL Error: source<%s> type<%s> id<%u> severity<%s>:\n%s", sourceStr.c_str(), typeStr.c_str(), id, severityStr.c_str(), messageStr.c_str());
+	LOG_L(L_ERROR, "OpenGL: source<%s> type<%s> id<%u> severity<%s>:\n%s",
+			sourceStr.c_str(), typeStr.c_str(), id, severityStr.c_str(),
+			messageStr.c_str());
 }
 #endif // GL_ARB_debug_output
 
@@ -160,67 +162,74 @@ void LoadExtensions()
 {
 	glewInit();
 
+	const char* glVersion = (const char*) glGetString(GL_VERSION);
+	const char* glVendor = (const char*) glGetString(GL_VENDOR);
+	const char* glRenderer = (const char*) glGetString(GL_RENDERER);
+	const char* glslVersion = (const char*) glGetString(GL_SHADING_LANGUAGE_VERSION);
+	const char* glewVersion = (const char*) glewGetString(GLEW_VERSION);
+	const char* glExtensions = (const char*) glGetString(GL_EXTENSIONS);
+
 	// log some useful version info
-	logOutput.Print("SDL:  %d.%d.%d\n",
+	LOG("SDL:  %d.%d.%d",
 		SDL_Linked_Version()->major,
 		SDL_Linked_Version()->minor,
 		SDL_Linked_Version()->patch);
-	logOutput.Print("GL:   %s\n", glGetString(GL_VERSION));
-	logOutput.Print("GL:   %s\n", glGetString(GL_VENDOR));
-	logOutput.Print("GL:   %s\n", glGetString(GL_RENDERER));
-	logOutput.Print("GLSL: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-	logOutput.Print("GLEW: %s\n", glewGetString(GLEW_VERSION));
+	LOG("GL version:   %s", glVersion);
+	LOG("GL vendor:    %s", glVendor);
+	LOG("GL renderer:  %s", glRenderer);
+	LOG("GLSL version: %s", glslVersion); // only non-NULL as of OpenGL 2.0
+	LOG("GLEW version: %s", glewVersion);
 
 #if       !defined DEBUG
-	// Print out warnings for really crappy graphic cards/drivers
 	{
-		const std::string gfxCard_vendor = (const char*) glGetString(GL_VENDOR);
-		const std::string gfxCard_model  = (const char*) glGetString(GL_RENDERER);
-		bool gfxCard_isWorthATry = true;
-		if (gfxCard_vendor == "SiS") {
-			gfxCard_isWorthATry = false;
-		} else if (gfxCard_model.find("Intel") != std::string::npos) {
+		// Print out warnings for really crappy graphic cards/drivers
+		const std::string gfxCardVendor = (glVendor != NULL)? glVendor: "UNKNOWN";
+		const std::string gfxCardModel  = (glRenderer != NULL)? glRenderer: "UNKNOWN";
+		bool gfxCardIsCrap = false;
+
+		if (gfxCardVendor == "SiS") {
+			gfxCardIsCrap = true;
+		} else if (gfxCardModel.find("Intel") != std::string::npos) {
 			// the vendor does not have to be Intel
-			if (gfxCard_model.find(" 945G") != std::string::npos) {
-				gfxCard_isWorthATry = false;
-			} else if (gfxCard_model.find(" 915G") != std::string::npos) {
-				gfxCard_isWorthATry = false;
+			if (gfxCardModel.find(" 945G") != std::string::npos) {
+				gfxCardIsCrap = true;
+			} else if (gfxCardModel.find(" 915G") != std::string::npos) {
+				gfxCardIsCrap = true;
 			}
 		}
 
-		if (!gfxCard_isWorthATry) {
-			logOutput.Print("o_O\n");
-			logOutput.Print("WW     WWW     WW    AAA     RRRRR   NNN  NN  II  NNN  NN   GGGGG  \n");
-			logOutput.Print(" WW   WW WW   WW    AA AA    RR  RR  NNNN NN  II  NNNN NN  GG      \n");
-			logOutput.Print("  WW WW   WW WW    AAAAAAA   RRRRR   NN NNNN  II  NN NNNN  GG   GG \n");
-			logOutput.Print("   WWW     WWW    AA     AA  RR  RR  NN  NNN  II  NN  NNN   GGGGG  \n");
-			logOutput.Print("(warning)\n");
-			logOutput.Print("Your graphic card is ...\n");
-			logOutput.Print("well, you know ...\n");
-			logOutput.Print("insufficient\n");
-			logOutput.Print("(in case you are not using a horribly wrong driver).\n");
-			logOutput.Print("If the game crashes, looks ugly or runs slow, buy a better card!\n");
-			logOutput.Print(".\n");
+		if (gfxCardIsCrap) {
+			LOG_L(L_WARNING, "WW     WWW     WW    AAA     RRRRR   NNN  NN  II  NNN  NN   GGGGG ");
+			LOG_L(L_WARNING, " WW   WW WW   WW    AA AA    RR  RR  NNNN NN  II  NNNN NN  GG     ");
+			LOG_L(L_WARNING, "  WW WW   WW WW    AAAAAAA   RRRRR   NN NNNN  II  NN NNNN  GG   GG");
+			LOG_L(L_WARNING, "   WWW     WWW    AA     AA  RR  RR  NN  NNN  II  NN  NNN   GGGGG ");
+			LOG_L(L_WARNING, "(warning)");
+			LOG_L(L_WARNING, "Your graphic card is ...");
+			LOG_L(L_WARNING, "well, you know ...");
+			LOG_L(L_WARNING, "insufficient");
+			LOG_L(L_WARNING, "(in case you are not using a horribly wrong driver).");
+			LOG_L(L_WARNING, "If the game crashes, looks ugly or runs slow, buy a better card!");
+			LOG_L(L_WARNING, ".");
 		}
 	}
 #endif // !defined DEBUG
 
-	std::string s = (char*)glGetString(GL_EXTENSIONS);
-	for (unsigned int i=0; i<s.length(); i++)
-		if (s[i]==' ') s[i]='\n';
+	std::string s = (glExtensions != NULL)? glExtensions: "";
+	for (unsigned int i = 0; i < s.length(); i++)
+		if (s[i] == ' ') s[i] = '\n';
 
 	std::string missingExts = "";
-	if(!GLEW_ARB_multitexture) {
+	if (!GLEW_ARB_multitexture) {
 		missingExts += " GL_ARB_multitexture";
 	}
-	if(!GLEW_ARB_texture_env_combine) {
+	if (!GLEW_ARB_texture_env_combine) {
 		missingExts += " GL_ARB_texture_env_combine";
 	}
-	if(!GLEW_ARB_texture_compression) {
+	if (!GLEW_ARB_texture_compression) {
 		missingExts += " GL_ARB_texture_compression";
 	}
 
-	if(!missingExts.empty()) {
+	if (!missingExts.empty()) {
 		static const unsigned int errorMsg_maxSize = 2048;
 		char errorMsg[errorMsg_maxSize];
 		SNPRINTF(errorMsg, errorMsg_maxSize,
@@ -229,14 +238,15 @@ void LoadExtensions()
 				"Update your graphic-card driver!\n"
 				"graphic card:   %s\n"
 				"OpenGL version: %s\n",
-				missingExts.c_str(), (const char*)glGetString(GL_RENDERER),
-				(const char*)glGetString(GL_RENDERER));
+				missingExts.c_str(),
+				glRenderer,
+				glVersion);
 		handleerror(0, errorMsg, "Update graphic drivers", 0);
 	}
 
-#ifdef GL_ARB_debug_output //! it's not defined in older GLEW versions
+#if defined(GL_ARB_debug_output) && !defined(HEADLESS) //! it's not defined in older GLEW versions
 	if (GLEW_ARB_debug_output) {
-		logOutput.Print("Installing OpenGL-DebugMessageHandler");
+		LOG("Installing OpenGL-DebugMessageHandler");
 		glDebugMessageCallbackARB(&OpenGLDebugMessageCallback, NULL);
 	}
 #endif
@@ -250,13 +260,14 @@ void UnloadExtensions()
 {
 	delete vertexArray1;
 	delete vertexArray2;
-	vertexArray1 = vertexArray2 = NULL;
+	vertexArray1 = NULL;
+	vertexArray2 = NULL;
 }
 
 
 /******************************************************************************/
 
-void glBuildMipmaps(const GLenum target,GLint internalFormat,const GLsizei width,const GLsizei height,const GLenum format,const GLenum type,const void *data)
+void glBuildMipmaps(const GLenum target, GLint internalFormat, const GLsizei width, const GLsizei height, const GLenum format, const GLenum type, const void* data)
 {
 	ScopedTimer timer("Textures::glBuildMipmaps");
 
@@ -276,23 +287,24 @@ void glBuildMipmaps(const GLenum target,GLint internalFormat,const GLsizei width
 
 	// create mipmapped texture
 
-	if (glGenerateMipmapEXT && !globalRendering->atiHacks) {
+	if (IS_GL_FUNCTION_AVAILABLE(glGenerateMipmapEXT) && !globalRendering->atiHacks) {
 		// newest method
 		glTexImage2D(target, 0, internalFormat, width, height, 0, format, type, data);
 		if (globalRendering->atiHacks) {
 			glEnable(target);
 			glGenerateMipmapEXT(target);
 			glDisable(target);
-		}else{
+		} else {
 			glGenerateMipmapEXT(target);
 		}
-	}else if (GLEW_VERSION_1_4) {
+	} else if (GLEW_VERSION_1_4) {
 		// This required GL-1.4
 		// instead of using glu, we rely on glTexImage2D to create the Mipmaps.
 		glTexParameteri(target, GL_GENERATE_MIPMAP, GL_TRUE);
 		glTexImage2D(target, 0, internalFormat, width, height, 0, format, type, data);
-	} else
+	} else {
 		gluBuild2DMipmaps(target, internalFormat, width, height, format, type, data);
+	}
 }
 
 
@@ -300,19 +312,19 @@ void glBuildMipmaps(const GLenum target,GLint internalFormat,const GLsizei width
 
 void ClearScreen()
 {
-	glClearColor(0,0,0,1);
+	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glMatrixMode(GL_PROJECTION); // Select The Projection Matrix
 	glLoadIdentity();            // Reset The Projection Matrix
-	gluOrtho2D(0,1,0,1);
+	gluOrtho2D(0, 1, 0, 1);
 	glMatrixMode(GL_MODELVIEW);  // Select The Modelview Matrix
 
 	glLoadIdentity();
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_2D);
-	glColor3f(1,1,1);
+	glColor3f(1, 1, 1);
 }
 
 
@@ -333,7 +345,7 @@ bool ProgramStringIsNative(GLenum target, const char* filename)
 	// clear any current GL errors so that the following check is valid
 	glClearErrors();
 
-	GLuint tempProg = LoadProgram(target, filename, (target == GL_VERTEX_PROGRAM_ARB? "vertex": "fragment"));
+	const GLuint tempProg = LoadProgram(target, filename, (target == GL_VERTEX_PROGRAM_ARB? "vertex": "fragment"));
 
 	if (tempProg == 0) {
 		return false;
@@ -356,8 +368,9 @@ bool ProgramStringIsNative(GLenum target, const char* filename)
  */
 static bool CheckParseErrors(GLenum target, const char* filename, const char* program)
 {
-	if (glGetError() != GL_INVALID_OPERATION)
+	if (glGetError() != GL_INVALID_OPERATION) {
 		return false;
+	}
 
 	// Find the error position
 	GLint errorPos = -1;
@@ -370,7 +383,7 @@ static bool CheckParseErrors(GLenum target, const char* filename, const char* pr
 	// errors and warnings string.
 	const GLubyte* errString = glGetString(GL_PROGRAM_ERROR_STRING_ARB);
 
-	logOutput.Print(
+	LOG_L(L_ERROR,
 		"[myGL::CheckParseErrors] Shader compilation error at index "
 		"%d (near \"%.30s\") when loading %s-program file %s:\n%s",
 		errorPos, program + errorPos,

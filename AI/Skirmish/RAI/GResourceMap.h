@@ -1,6 +1,6 @@
 // _____________________________________________________
 //
-// RAI - Skirmish AI for TA Spring
+// RAI - Skirmish AI for Spring
 // Author: Reth / Michael Vadovszki
 // _____________________________________________________
 
@@ -115,7 +115,7 @@ private:
 	vector<int> saveF;
 	int saveSectorSize;
 
-//	cLogFile *l; // Debugging only
+	cLogFile* l;
 };
 
 #endif

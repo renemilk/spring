@@ -2,17 +2,20 @@
 
 /* based on original los code in LosHandler.{cpp,h} and RadarHandler.{cpp,h} */
 
-#include "StdAfx.h"
 #include "LosMap.h"
+#include "Map/ReadMap.h"
+#include "System/myMath.h"
+#include "System/float3.h"
+
+#ifdef USE_UNSYNCED_HEIGHTMAP
+#include "Game/GlobalUnsynced.h" // for myAllyTeam
+#endif
 
 #include <algorithm>
 #include <cstring>
 
-#include "myMath.h"
-#include "float3.h"
 
 
-//////////////////////////////////////////////////////////////////////
 
 
 void CLosMap::SetSize(int2 newSize)
@@ -23,33 +26,91 @@ void CLosMap::SetSize(int2 newSize)
 }
 
 
-void CLosMap::AddMapArea(int2 pos, int radius, int amount)
+
+void CLosMap::AddMapArea(int2 pos, int allyteam, int radius, int amount)
 {
-	const int sx = std::max(0, pos.x - radius);
+	#ifdef USE_UNSYNCED_HEIGHTMAP
+	static const int LOS2HEIGHT_X = gs->mapx / size.x;
+	static const int LOS2HEIGHT_Z = gs->mapy / size.y;
+
+	const bool updateUnsyncedHeightMap = (allyteam >= 0 && (allyteam == gu->myAllyTeam || gu->spectatingFullView));
+	#endif
+
+	const int sx = std::max(         0, pos.x - radius);
 	const int ex = std::min(size.x - 1, pos.x + radius);
-	const int sy = std::max(0, pos.y - radius);
+	const int sy = std::max(         0, pos.y - radius);
 	const int ey = std::min(size.y - 1, pos.y + radius);
 
 	const int rr = (radius * radius);
 
-	for (int y = sy; y <= ey; ++y) {
-		const int rrx = rr - Square(pos.y - y);
-		for (int x = sx; x <= ex; ++x) {
-			if (Square(pos.x - x) <= rrx) {
-				map[(y * size.x) + x] += amount;
+	for (int lmz = sy; lmz <= ey; ++lmz) {
+		const int rrx = rr - Square(pos.y - lmz);
+		for (int lmx = sx; lmx <= ex; ++lmx) {
+			const int losMapSquareIdx = (lmz * size.x) + lmx;
+			#ifdef USE_UNSYNCED_HEIGHTMAP
+			const bool squareEnteredLOS = (map[losMapSquareIdx] == 0 && amount > 0);
+			#endif
+
+			if (Square(pos.x - lmx) > rrx) {
+				continue;
 			}
+
+			map[losMapSquareIdx] += amount;
+
+			#ifdef USE_UNSYNCED_HEIGHTMAP
+			// update unsynced heightmap for all squares that
+			// cover LOSmap square <x, y> (LOSmap resolution
+			// is never greater than that of the heightmap)
+			//
+			// NOTE:
+			//     CLosMap is also used by RadarHandler, so only
+			//     update the unsynced heightmap from LosHandler
+			//     (by checking if allyteam >= 0)
+			//
+			if (!updateUnsyncedHeightMap) { continue; }
+			if (!squareEnteredLOS) { continue; }
+
+			const int hmxTL = lmx * LOS2HEIGHT_X, hmxBR = std::min(gs->mapxm1, (lmx + 1) * LOS2HEIGHT_X);
+			const int hmzTL = lmz * LOS2HEIGHT_Z, hmzBR = std::min(gs->mapym1, (lmz + 1) * LOS2HEIGHT_Z);
+
+			readmap->PushVisibleHeightMapUpdate(hmxTL, hmzTL,  hmxBR, hmzBR,  true);
+			#endif
 		}
 	}
 }
 
-
-void CLosMap::AddMapSquares(const std::vector<int>& squares, int amount)
+void CLosMap::AddMapSquares(const std::vector<int>& squares, int allyteam, int amount)
 {
+	#ifdef USE_UNSYNCED_HEIGHTMAP
+	static const int LOS2HEIGHT_X = gs->mapx / size.x;
+	static const int LOS2HEIGHT_Z = gs->mapy / size.y;
+
+	const bool updateUnsyncedHeightMap = (allyteam >= 0 && (allyteam == gu->myAllyTeam || gu->spectatingFullView));
+	#endif
+
 	std::vector<int>::const_iterator lsi;
 	for (lsi = squares.begin(); lsi != squares.end(); ++lsi) {
-		map[*lsi] += amount;
+		const int losMapSquareIdx = *lsi;
+		#ifdef USE_UNSYNCED_HEIGHTMAP
+		const bool squareEnteredLOS = (map[losMapSquareIdx] == 0 && amount > 0);
+		#endif
+
+		map[losMapSquareIdx] += amount;
+
+		#ifdef USE_UNSYNCED_HEIGHTMAP
+		if (!updateUnsyncedHeightMap) { continue; }
+		if (!squareEnteredLOS) { continue; }
+
+		const int lmx = losMapSquareIdx % size.x;
+		const int lmz = losMapSquareIdx / size.x;
+		const int hmxTL = lmx * LOS2HEIGHT_X, hmxBR = std::min(gs->mapxm1, (lmx + 1) * LOS2HEIGHT_X);
+		const int hmzTL = lmz * LOS2HEIGHT_Z, hmzBR = std::min(gs->mapym1, (lmz + 1) * LOS2HEIGHT_Z);
+
+		readmap->PushVisibleHeightMapUpdate(hmxTL, hmzTL,  hmxBR, hmzBR,  true);
+		#endif
 	}
 }
+
 
 
 //////////////////////////////////////////////////////////////////////
@@ -234,8 +295,8 @@ void CLosAlgorithm::LosAdd(int2 pos, int radius, float baseHeight, std::vector<i
 {
 	if (radius <= 0) { return; }
 
-	pos.x = Clamp(size.x - 1, 0, pos.x);
-	pos.y = Clamp(size.y - 1, 0, pos.y);
+	pos.x = Clamp(pos.x, 0, size.x - 1);
+	pos.y = Clamp(pos.y, 0, size.y - 1);
 
 	if ((pos.x - radius < radius) || (pos.x + radius >= size.x - radius) || // FIXME: This additional margin is due to a suspect bug in losalgorithm
 	    (pos.y - radius < radius) || (pos.y + radius >= size.y - radius)) { // causing rare crash with big units such as arm Colossus

@@ -1,8 +1,8 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
-#include "EventClient.h"
+#include "System/EventClient.h"
+#include "System/EventHandler.h"
 
 /******************************************************************************/
 /******************************************************************************/
@@ -14,6 +14,16 @@ CEventClient::CEventClient(const std::string& _name, int _order, bool _synced)
 {
 }
 
+
+CEventClient::~CEventClient()
+{
+	//! No, we can't autobind all clients in the ctor.
+	//! eventHandler.AddClient() calls CEventClient::WantsEvent() that is
+	//! virtual and so not available during the initialization.
+	eventHandler.RemoveClient(this);
+}
+
+
 /******************************************************************************/
 /******************************************************************************/
 //
@@ -23,6 +33,7 @@ CEventClient::CEventClient(const std::string& _name, int _order, bool _synced)
 void CEventClient::Save(zipFile archive) {}
 
 void CEventClient::Update() {}
+void CEventClient::UnsyncedHeightMapUpdate(const SRectangle& rect) {}
 
 void CEventClient::ViewResize() {}
 
@@ -51,7 +62,9 @@ std::string CEventClient::GetTooltip(int x, int y) { return ""; }
 
 bool CEventClient::CommandNotify(const Command& cmd) { return false; }
 
-bool CEventClient::AddConsoleLine(const std::string& msg, const CLogSubsystem& subsystem) { return false; }
+bool CEventClient::AddConsoleLine(const std::string& msg, const std::string& section, int level) { return false; }
+
+void CEventClient::LastMessagePosition(const float3& pos) {}
 
 bool CEventClient::GroupChanged(int groupID) { return false; }
 

@@ -1,14 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "FireBallProjectile.h"
 #include "Game/Camera.h"
 #include "Map/Ground.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
 #include "Sim/Weapons/WeaponDef.h"
 #include "System/creg/STL_Deque.h"
@@ -132,7 +131,7 @@ void CFireBallProjectile::Update()
 		sparks[i].speed *= 0.95f;
 	}
 
-	gCEG->Explosion(cegID, pos, ttl, (sparks.size() > 0) ? sparks[0].size : 0.0f, NULL, 0.0f, NULL, speed);
+	gCEG->Explosion(cegID, pos, ttl, !sparks.empty() ? sparks[0].size : 0.0f, NULL, 0.0f, NULL, speed);
 	UpdateGroundBounce();
 }
 
@@ -152,11 +151,6 @@ void CFireBallProjectile::EmitSpark()
 
 void CFireBallProjectile::Collision()
 {
-	if (weaponDef->waterweapon && ground->GetHeightReal(pos.x, pos.z) < pos.y) {
-		// make waterweapons not explode in water
-		return;
-	}
-
 	CWeaponProjectile::Collision();
 	deleteMe = false;
 }

@@ -1,12 +1,17 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <fstream>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ExternalAI/EngineOutHandler.h"
 #include "CregLoadSaveHandler.h"
 #include "Map/ReadMap.h"
+#include "Game/Game.h"
+#include "Game/GameSetup.h"
+#include "Game/GameServer.h"
+#include "Game/InMapDrawModel.h"
+#include "Game/GlobalUnsynced.h"
+#include "Game/WaitCommandsAI.h"
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Units/UnitHandler.h"
 #include "Sim/Misc/RadarHandler.h"
@@ -15,23 +20,18 @@
 #include "Sim/Misc/AirBaseHandler.h"
 #include "Sim/Misc/QuadField.h"
 #include "Sim/Misc/CategoryHandler.h"
-#include "Sim/Projectiles/ProjectileHandler.h"
-#include "Platform/errorhandler.h"
-#include "FileSystem/FileSystem.h"
-#include "creg/Serializer.h"
-#include "Game/Game.h"
-#include "Game/GameSetup.h"
-#include "Game/GameServer.h"
 #include "Sim/Misc/TeamHandler.h"
-#include "LogOutput.h"
-#include "Game/WaitCommandsAI.h"
 #include "Sim/Misc/Wind.h"
+#include "Sim/Projectiles/ProjectileHandler.h"
 #include "Sim/Units/CommandAI/BuilderCAI.h"
 #include "Sim/Units/Groups/GroupHandler.h"
-#include "Game/GameServer.h"
-#include "Game/InMapDrawModel.h"
-#include "GlobalUnsynced.h"
-#include "Exceptions.h"
+
+#include "System/Platform/errorhandler.h"
+#include "System/FileSystem/DataDirsAccess.h"
+#include "System/FileSystem/FileQueryFlags.h"
+#include "System/creg/Serializer.h"
+#include "System/Exceptions.h"
+#include "System/Log/ILog.h"
 
 CCregLoadSaveHandler::CCregLoadSaveHandler()
 	: ifs(NULL)
@@ -110,21 +110,21 @@ void CGameStateCollector::Serialize(creg::ISerializer& s)
 static void PrintSize(const char* txt, int size)
 {
 	if (size > (1024 * 1024 * 1024)) {
-		logOutput.Print("%s %.1f GB", txt, size / (1024.0f * 1024 * 1024));
+		LOG("%s %.1f GB", txt, size / (1024.0f * 1024 * 1024));
 	} else if (size >  (1024 * 1024)) {
-		logOutput.Print("%s %.1f MB", txt, size / (1024.0f * 1024));
+		LOG("%s %.1f MB", txt, size / (1024.0f * 1024));
 	} else if (size > 1024) {
-		logOutput.Print("%s %.1f KB", txt, size / (1024.0f));
+		LOG("%s %.1f KB", txt, size / (1024.0f));
 	} else {
-		logOutput.Print("%s %u B",    txt, size);
+		LOG("%s %u B",    txt, size);
 	}
 }
 
 void CCregLoadSaveHandler::SaveGame(const std::string& file)
 {
-	logOutput.Print("Saving game");
+	LOG("Saving game");
 	try {
-		std::ofstream ofs(filesystem.LocateFile(file, FileSystem::WRITE).c_str(), std::ios::out|std::ios::binary);
+		std::ofstream ofs(dataDirsAccess.LocateFile(file, FileQueryFlags::WRITE).c_str(), std::ios::out|std::ios::binary);
 		if (ofs.bad() || !ofs.is_open()) {
 			throw content_error("Unable to save game to file \"" + file + "\"");
 		}
@@ -144,14 +144,14 @@ void CCregLoadSaveHandler::SaveGame(const std::string& file)
 		int aistart = ofs.tellp();
 		eoh->Save(&ofs);
 		PrintSize("AIs", ((int)ofs.tellp())-aistart);
-	} catch (content_error& e) {
-		logOutput.Print("Save failed(content error): %s", e.what());
-	} catch (std::exception& e) {
-		logOutput.Print("Save failed: %s", e.what());
-	} catch (char*& e) {
-		logOutput.Print("Save failed: %s", e);
+	} catch (const content_error& ex) {
+		LOG_L(L_ERROR, "Save failed(content error): %s", ex.what());
+	} catch (const std::exception& ex) {
+		LOG_L(L_ERROR, "Save failed: %s", ex.what());
+	} catch (const char*& exStr) {
+		LOG_L(L_ERROR, "Save failed: %s", exStr);
 	} catch (...) {
-		logOutput.Print("Save failed(unknown error)");
+		LOG_L(L_ERROR, "Save failed(unknown error)");
 	}
 }
 
@@ -159,7 +159,7 @@ void CCregLoadSaveHandler::SaveGame(const std::string& file)
 void CCregLoadSaveHandler::LoadGameStartInfo(const std::string& file)
 {
 	const std::string file2 = FindSaveFile(file);
-	ifs = new std::ifstream (filesystem.LocateFile(file2).c_str(), std::ios::in|std::ios::binary);
+	ifs = new std::ifstream (dataDirsAccess.LocateFile(file2).c_str(), std::ios::in|std::ios::binary);
 
 	// in case these contained values alredy
 	// (this is the case when loading a game through the spring menu eg),

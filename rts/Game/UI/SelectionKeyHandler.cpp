@@ -1,28 +1,28 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <fstream>
 #include <SDL_keysym.h>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Game/Camera/CameraController.h"
 #include "Game/Camera.h"
 #include "Game/CameraHandler.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/SelectedUnits.h"
-#include "Sim/Misc/TeamHandler.h"
-#include "LogOutput.h"
-#include "Map/Ground.h"
+#include "KeyBindings.h"
 #include "MouseHandler.h"
-#include "FileSystem/FileSystem.h"
 #include "SelectionKeyHandler.h"
+#include "Map/Ground.h"
 #include "Sim/Misc/CategoryHandler.h"
+#include "Sim/Misc/TeamHandler.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitHandler.h"
 #include "Sim/Units/UnitTypes/Building.h"
-#include "KeyBindings.h"
-#include "myMath.h"
+#include "System/Log/ILog.h"
+#include "System/myMath.h"
+#include "System/FileSystem/DataDirsAccess.h"
 #include <boost/cstdint.hpp>
 
 CSelectionKeyHandler* selectionKeys;
@@ -38,7 +38,7 @@ CSelectionKeyHandler::~CSelectionKeyHandler()
 
 void CSelectionKeyHandler::LoadSelectionKeys()
 {
-	std::ifstream ifs(filesystem.LocateFile("selectkeys.txt").c_str());
+	std::ifstream ifs(dataDirsAccess.LocateFile("selectkeys.txt").c_str());
 
 	selectNumber = 0;
 
@@ -89,7 +89,7 @@ void CSelectionKeyHandler::LoadSelectionKeys()
 		}
 		if ( keybindstring.size() != 0 ) keybindstring += "+";
 		keybindstring += keyname;
-		keyBindings->Command( "bind " + keybindstring + " select " + sel );
+		keyBindings->ExecuteCommand( "bind " + keybindstring + " select " + sel );
 	}
 }
 
@@ -301,7 +301,7 @@ void CSelectionKeyHandler::DoSelection(std::string selectString)
 		ReadDelimiter(selectString);
 		float maxDist=atof(ReadToken(selectString).c_str());
 
-		float dist=ground->LineGroundCol(camera->pos,camera->pos+mouse->dir*8000);
+		float dist = ground->LineGroundCol(camera->pos, camera->pos + mouse->dir * 8000, false);
 		float3 mp=camera->pos+mouse->dir*dist;
 		if (cylindrical) {
 			mp.y = 0;
@@ -338,7 +338,7 @@ void CSelectionKeyHandler::DoSelection(std::string selectString)
 			selection.push_back(*ui);
 		}
 	} else {
-		logOutput.Print("Unknown source token %s",s.c_str());
+		LOG_L(L_WARNING, "Unknown source token %s", s.c_str());
 		return;
 	}
 
@@ -380,7 +380,7 @@ void CSelectionKeyHandler::DoSelection(std::string selectString)
 			}
 		}
 		else {
-			logOutput.Print("Unknown token in filter %s",s.c_str());
+			LOG_L(L_WARNING, "Unknown token in filter %s", s.c_str());
 			return;
 		}
 	}
@@ -471,6 +471,6 @@ void CSelectionKeyHandler::DoSelection(std::string selectString)
 
 		selectNumber+=num;
 	} else {
-		logOutput.Print("Unknown token in conclusion %s",s.c_str());
+		LOG_L(L_WARNING, "Unknown token in conclusion %s", s.c_str());
 	}
 }

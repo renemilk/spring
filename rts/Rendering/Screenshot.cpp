@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "Screenshot.h"
 
 #include <vector>
@@ -8,15 +7,16 @@
 #include <boost/thread.hpp>
 
 #include "Rendering/GL/myGL.h"
-#include "FileSystem/FileSystem.h"
-#include "FileSystem/FileHandler.h"
-#include "ConfigHandler.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Textures/Bitmap.h"
-#include "GlobalUnsynced.h"
-#include "LogOutput.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/FileSystem/FileHandler.h"
 
 #undef CreateDirectory
+
+CONFIG(int, ScreenshotCounter).defaultValue(0);
 
 struct FunctionArgs
 {
@@ -38,7 +38,7 @@ public:
 			delete myThread;
 		}
 	};
-	
+
 	void AddTask(FunctionArgs arg)
 	{
 		{
@@ -46,14 +46,14 @@ public:
 			tasks.push_back(arg);
 			Update();
 		}
-		
+
 		if (!myThread)
 		{
 			finished = false;
 			myThread = new boost::thread(boost::bind(&SaverThread::SaveStuff, this));
 		}
 	};
-	
+
 	void Update()
 	{
 		if (finished && myThread)
@@ -64,7 +64,7 @@ public:
 			finished = false;
 		}
 	};
-	
+
 private:
 	bool GetTask(FunctionArgs& args)
 	{
@@ -80,7 +80,7 @@ private:
 			return false;
 		}
 	}
-	
+
 	void SaveStuff()
 	{
 		FunctionArgs args;
@@ -90,11 +90,11 @@ private:
 			delete[] args.buf;
 			b.ReverseYAxis();
 			b.Save(args.filename);
-			LogObject() << "Saved: " << args.filename;
+			LOG("Saved: %s", args.filename.c_str());
 		}
 		finished = true;
 	};
-	
+
 	boost::mutex myMutex;
 	boost::thread* myThread;
 	volatile bool finished;
@@ -108,7 +108,7 @@ void TakeScreenshot(std::string type)
 	if (type.empty())
 		type = "png";
 
-	if (filesystem.CreateDirectory("screenshots"))
+	if (FileSystem::CreateDirectory("screenshots"))
 	{
 		FunctionArgs args;
 		args.x = globalRendering->dualScreenMode? globalRendering->viewSizeX << 1: globalRendering->viewSizeX;
@@ -116,8 +116,8 @@ void TakeScreenshot(std::string type)
 
 		if (args.x % 4)
 			args.x += (4 - args.x % 4);
-		
-		for (int a = configHandler->Get("ScreenshotCounter", 0); a <= 99999; ++a)
+
+		for (int a = configHandler->GetInt("ScreenshotCounter"); a <= 99999; ++a)
 		{
 			std::ostringstream fname;
 			fname << "screenshots/screen" << std::setfill('0') << std::setw(5) << a << '.' << type;

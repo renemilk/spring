@@ -84,6 +84,9 @@ class LuaSyncedRead {
 		static int GetUnitNearestEnemy(lua_State* L);
 
 		static int GetFeaturesInRectangle(lua_State* L);
+		static int GetFeaturesInSphere(lua_State* L);
+		static int GetFeaturesInCylinder(lua_State* L);
+		static int GetProjectilesInRectangle(lua_State* L);
 
 		static int ValidUnitID(lua_State* L);
 		static int GetUnitTooltip(lua_State* L);
@@ -163,6 +166,7 @@ class LuaSyncedRead {
 		static int GetFeatureResources(lua_State* L);
 		static int GetFeatureNoSelect(lua_State* L);
 		static int GetFeatureResurrect(lua_State* L);
+		static int GetFeatureCollisionVolumeData(lua_State* L);
 
 		static int GetProjectilePosition(lua_State* L);
 		static int GetProjectileVelocity(lua_State* L);

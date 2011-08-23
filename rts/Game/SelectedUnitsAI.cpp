@@ -1,13 +1,11 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "SelectedUnitsAI.h"
 #include "SelectedUnits.h"
-#include "LogOutput.h"
-#include "NetProtocol.h"
+#include "System/NetProtocol.h"
 #include "Sim/Misc/GlobalSynced.h"
 #include "GlobalUnsynced.h"
 #include "PlayerHandler.h"
@@ -109,7 +107,7 @@ void CSelectedUnitsAI::GiveCommandNet(Command &c, int player)
 	}
 	else if ((cmd_id == CMD_ATTACK) && (
 			(c.GetParamsCount() == 6) ||
-			(c.GetParam(3) > 0.001f)
+			((c.GetParamsCount() == 4) && (c.GetParam(3) > 0.001f))
 		))
 	{
 		SelectAttack(c, player);

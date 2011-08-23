@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "MoveType.h"
 #include "Map/Ground.h"
@@ -43,9 +42,6 @@ AMoveType::AMoveType(CUnit* owner):
 {
 }
 
-AMoveType::~AMoveType(void)
-{
-}
 
 void AMoveType::SetMaxSpeed(float speed)
 {
@@ -71,14 +67,16 @@ void AMoveType::SlowUpdate()
 
 		const int newMapSquare = ground->GetSquare(owner->pos);
 		const float losHeight = owner->losHeight;
+		const float radarHeight = owner->radarHeight;
 		const bool isAirMoveType = !owner->usingScriptMoveType && owner->unitDef->canfly;
 
 		if (newMapSquare != owner->mapSquare) {
 			owner->mapSquare = newMapSquare;
 
 			if (isAirMoveType) {
-				// temporarily set LOS-height to current altitude for aircraft
+				// temporarily set LOS- and radar-height to current altitude for aircraft
 				owner->losHeight = (owner->pos.y - ground->GetApproximateHeight(owner->pos.x, owner->pos.z)) + 5.0f;
+				owner->radarHeight = owner->losHeight;
 			}
 
 			loshandler->MoveUnit(owner, false);
@@ -86,15 +84,12 @@ void AMoveType::SlowUpdate()
 
 			if (isAirMoveType) {
 				owner->losHeight = losHeight;
+				owner->radarHeight = radarHeight;
 			}
 		}
 
 		qf->MovedUnit(owner);
 	}
-}
-
-void AMoveType::LeaveTransport(void)
-{
 }
 
 void AMoveType::KeepPointingTo(CUnit* unit, float distance, bool aggressive)

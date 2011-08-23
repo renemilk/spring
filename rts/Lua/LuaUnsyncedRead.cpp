@@ -1,18 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include "Game/SelectedUnits.h"
 
-#include <set>
-#include <list>
-#include <cctype>
-
-#include <SDL_timer.h>
-#include <SDL_keysym.h>
-#include <SDL_mouse.h>
-
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaUnsyncedRead.h"
 
@@ -25,6 +16,7 @@
 #include "Game/Game.h"
 #include "Game/GameHelper.h"
 #include "Game/GameSetup.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/PlayerHandler.h"
 #include "Game/PlayerRoster.h"
 #include "Game/TraceRay.h"
@@ -37,13 +29,14 @@
 #include "Game/UI/MiniMap.h"
 #include "Game/UI/MouseHandler.h"
 #include "Map/BaseGroundDrawer.h"
+#include "Map/BaseGroundTextures.h"
 #include "Map/Ground.h"
 #include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/IconHandler.h"
 #include "Rendering/ShadowHandler.h"
 #include "Rendering/UnitDrawer.h"
-#include "Rendering/Env/BaseWater.h"
+#include "Rendering/Env/IWater.h"
 #include "Sim/Features/Feature.h"
 #include "Sim/Features/FeatureDef.h"
 #include "Sim/Features/FeatureHandler.h"
@@ -66,7 +59,13 @@
 	#include "System/Sound/EFXPresets.h"
 #endif
 
-using namespace std;
+#include <set>
+#include <list>
+#include <cctype>
+
+#include <SDL_timer.h>
+#include <SDL_keysym.h>
+#include <SDL_mouse.h>
 
 const int CMD_INDEX_OFFSET = 1; // starting index for command descriptions
 
@@ -136,6 +135,7 @@ bool LuaUnsyncedRead::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(HaveAdvShading);
 	REGISTER_LUA_CFUNC(GetWaterMode);
 	REGISTER_LUA_CFUNC(GetMapDrawMode);
+	REGISTER_LUA_CFUNC(GetMapSquareTexture);
 
 	REGISTER_LUA_CFUNC(GetCameraNames);
 	REGISTER_LUA_CFUNC(GetCameraState);
@@ -622,14 +622,7 @@ int LuaUnsyncedRead::GetUnitViewPosition(lua_State* L)
 	}
 	const bool midPos = (lua_isboolean(L, 2) && lua_toboolean(L, 2));
 
-	float3 pos = midPos ? (float3)unit->midPos : (float3)unit->pos;
-	CTransportUnit *trans=unit->GetTransporter();
-	if (trans == NULL) {
-		pos += (unit->speed * globalRendering->timeOffset);
-	} else {
-		pos += (trans->speed * globalRendering->timeOffset);
-	}
-
+	float3& pos = midPos ? unit->drawMidPos : unit->drawPos;
 	lua_pushnumber(L, pos.x);
 	lua_pushnumber(L, pos.y);
 	lua_pushnumber(L, pos.z);
@@ -974,7 +967,6 @@ int LuaUnsyncedRead::GetSelectedUnits(lua_State* L)
 		lua_pushnumber(L, (*it)->id);
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", count);
 	return 1;
 }
 
@@ -1005,10 +997,11 @@ int LuaUnsyncedRead::GetSelectedUnitsSorted(lua_State* L)
 				lua_pushnumber(L, unit->id);
 				lua_rawset(L, -3);
 			}
-			HSTR_PUSH_NUMBER(L, "n", v.size());
 		}
 		lua_rawset(L, -3);
 	}
+
+	// UnitDef ID keys are not necessarily consecutive
 	HSTR_PUSH_NUMBER(L, "n", unitDefMap.size());
 	return 1;
 }
@@ -1041,6 +1034,8 @@ int LuaUnsyncedRead::GetSelectedUnitsCounts(lua_State* L)
 		lua_pushnumber(L, mit->second); // push the UnitDef unit count
 		lua_rawset(L, -3);
 	}
+
+	// UnitDef ID keys are not necessarily consecutive
 	HSTR_PUSH_NUMBER(L, "n", countMap.size());
 	return 1;
 }
@@ -1122,6 +1117,52 @@ int LuaUnsyncedRead::GetMapDrawMode(lua_State* L)
 	return 1;
 }
 
+
+int LuaUnsyncedRead::GetMapSquareTexture(lua_State* L)
+{
+	if (CLuaHandle::GetSynced(L)) {
+		return 0;
+	}
+
+	const int texSquareX = luaL_checkint(L, 1);
+	const int texSquareY = luaL_checkint(L, 2);
+	const int texMipLevel = luaL_checkint(L, 3);
+	const std::string& texName = luaL_checkstring(L, 4);
+
+	CBaseGroundDrawer* groundDrawer = readmap->GetGroundDrawer();
+	CBaseGroundTextures* groundTextures = groundDrawer->GetGroundTextures();
+
+	if (groundTextures == NULL) {
+		lua_pushboolean(L, false);
+		return 1;
+	}
+	if (texName.empty()) {
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	const LuaTextures& luaTextures = CLuaHandle::GetActiveTextures(L);
+	const LuaTextures::Texture* luaTexture = luaTextures.GetInfo(texName);
+
+	if (luaTexture == NULL) {
+		// not a valid texture (name)
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	const int tid = luaTexture->id;
+	const int txs = luaTexture->xsize;
+	const int tys = luaTexture->ysize;
+
+	if (txs != tys) {
+		// square textures only
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	lua_pushboolean(L, groundTextures->GetSquareLuaTexture(texSquareX, texSquareY, tid, txs, tys, texMipLevel));
+	return 1;
+}
 
 /******************************************************************************/
 
@@ -1260,7 +1301,7 @@ int LuaUnsyncedRead::TraceScreenRay(lua_State* L)
 					return 2;
 				}
 			}
-			const float posY = ground->GetHeightReal(pos.x, pos.z);
+			const float posY = ground->GetHeightReal(pos.x, pos.z, false);
 			lua_pushliteral(L, "ground");
 			lua_createtable(L, 3, 0);
 			lua_pushnumber(L, pos.x); lua_rawseti(L, -2, 1);
@@ -1579,17 +1620,18 @@ int LuaUnsyncedRead::GetActiveCommand(lua_State* L)
 
 int LuaUnsyncedRead::GetDefaultCommand(lua_State* L)
 {
-	GML_RECMUTEX_LOCK(gui); // GetDefaultCommand
-
 	if (guihandler == NULL) {
 		return 0;
 	}
 	CheckNoArgs(L, __FUNCTION__);
 
+	const int defCmd = guihandler->GetDefaultCommand(mouse->lastx, mouse->lasty);
+
+	GML_RECMUTEX_LOCK(gui); // GetDefaultCommand
+
 	const vector<CommandDescription>& cmdDescs = guihandler->commands;
 	const int cmdDescCount = (int)cmdDescs.size();
 
-	const int defCmd = guihandler->GetDefaultCommand(mouse->lastx, mouse->lasty);
 	lua_pushnumber(L, defCmd + CMD_INDEX_OFFSET);
 	if ((defCmd < 0) || (defCmd >= cmdDescCount)) {
 		return 1;
@@ -1621,7 +1663,6 @@ int LuaUnsyncedRead::GetActiveCmdDescs(lua_State* L)
 		LuaUtils::PushCommandDesc(L, cmdDescs[i]);
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", cmdDescCount);
 	return 1;
 }
 
@@ -1863,7 +1904,7 @@ int LuaUnsyncedRead::GetConsoleBuffer(lua_State* L)
 		luaL_error(L, "Incorrect arguments to GetConsoleBuffer([count])");
 	}
 
-	deque<CInfoConsole::RawLine> lines;
+	std::deque<CInfoConsole::RawLine> lines;
 	ic->GetRawLines(lines);
 	const int lineCount = (int)lines.size();
 
@@ -1885,17 +1926,14 @@ int LuaUnsyncedRead::GetConsoleBuffer(lua_State* L)
 			lua_pushliteral(L, "text");
 			lua_pushsstring(L, lines[i].text);
 			lua_rawset(L, -3);
-			// FIXME: migrate priority to subsystem...
+			// FIXME migrate priority to level...
 			lua_pushliteral(L, "priority");
-			lua_pushnumber(L, 0 /*priority*/ );
-			//lua_pushstring(L, lines[i].subsystem->name);
+			lua_pushnumber(L, 0);
+			//lua_pushstring(L, lines[i].level);
 			lua_rawset(L, -3);
 		}
 		lua_rawset(L, -3);
 	}
-	lua_pushstring(L, "n");
-	lua_pushnumber(L, count);
-	lua_rawset(L, -3);
 
 	return 1;
 }
@@ -1957,9 +1995,6 @@ int LuaUnsyncedRead::GetKeyBindings(lua_State* L)
 		lua_rawset(L, -3);
 		lua_rawset(L, -3);
 	}
-	lua_pushstring(L, "n");
-	lua_pushnumber(L, actions.size());
-	lua_rawset(L, -3);
 	return 1;
 }
 
@@ -1979,9 +2014,6 @@ int LuaUnsyncedRead::GetActionHotKeys(lua_State* L)
 		lua_pushsstring(L, hotkey);
 		lua_rawset(L, -3);
 	}
-	lua_pushstring(L, "n");
-	lua_pushnumber(L, hotkeys.size());
-	lua_rawset(L, -3);
 	return 1;
 }
 
@@ -2058,7 +2090,6 @@ int LuaUnsyncedRead::GetGroupUnits(lua_State* L)
 		lua_pushnumber(L, (*it)->id);
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", count);
 
 	return 1;
 }
@@ -2095,11 +2126,9 @@ int LuaUnsyncedRead::GetGroupUnitsSorted(lua_State* L)
 				lua_pushnumber(L, unit->id);
 				lua_rawset(L, -3);
 			}
-			HSTR_PUSH_NUMBER(L, "n", v.size());
 		}
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", unitDefMap.size());
 
 	return 1;
 }
@@ -2137,7 +2166,6 @@ int LuaUnsyncedRead::GetGroupUnitsCounts(lua_State* L)
 		lua_pushnumber(L, mit->second); // push the UnitDef unit count
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", countMap.size());
 
 	return 1;
 }

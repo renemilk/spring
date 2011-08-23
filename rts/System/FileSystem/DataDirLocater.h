@@ -52,7 +52,7 @@ public:
 	 *
 	 * Windows:
 	 * - SPRING_DATADIR env-variable (semi-colon separated list, like PATH)
-	 * - ./springsettings.cfg:SpringData=C:\data (semi-colon separated list)
+	 * - ./springsettings.cfg:SpringData=C:\\data (semi-colon separated list)
 	 * - CWD; in portable mode only (usually: on):
 	 *   ~ path to the current work-dir/module,
 	 *     which is either spring.exe or unitsync.dll, or
@@ -104,6 +104,12 @@ public:
 
 	const std::vector<DataDir>& GetDataDirs() const { return dataDirs; }
 	const DataDir* GetWriteDir() const { return writeDir; }
+
+	/**
+	 * @brief returns the highest priority writable directory, aka the writedir
+	 */
+	std::string GetWriteDirPath() const;
+	std::vector<std::string> GetDataDirPaths() const;
 
 private:
 
@@ -180,5 +186,7 @@ private:
 	std::vector<DataDir> dataDirs;
 	const DataDir* writeDir;
 };
+
+extern DataDirLocater dataDirLocater;
 
 #endif // !defined(DATA_DIR_LOCATER_H)

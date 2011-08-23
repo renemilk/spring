@@ -8,7 +8,7 @@
 #include <map>
 #include "System/Info.h"
 
-class CArchiveBase;
+class IArchive;
 class IFileFilter;
 class LuaTable;
 
@@ -101,7 +101,15 @@ public:
 
 	std::vector<ArchiveData> GetPrimaryMods() const;
 	std::vector<ArchiveData> GetAllMods() const;
-	std::vector<std::string> GetArchives(const std::string& root, int depth = 0) const;
+	std::vector<std::string> GetArchives(const std::string& root) const {
+		return GetArchives(root, 0);
+	}
+private:
+	std::vector<std::string> GetArchives(const std::string& root, int depth) const;
+public:
+	/**
+	 * Returns the (human-readable) map names.
+	 */
 	std::vector<std::string> GetMaps() const;
 
 	/// checksum of the given archive (without dependencies)
@@ -157,24 +165,29 @@ private:
 		std::string problem;
 	};
 
+private:
 	void ScanDirs(const std::vector<std::string>& dirs, bool checksum = false);
 	void Scan(const std::string& curPath, bool doChecksum);
 
 	void ScanArchive(const std::string& fullName, bool checksum = false);
 	/// scan mapinfo / modinfo lua files
-	bool ScanArchiveLua(CArchiveBase* ar, const std::string& fileName, ArchiveInfo& ai, std::string& err);
+	bool ScanArchiveLua(IArchive* ar, const std::string& fileName, ArchiveInfo& ai, std::string& err);
 
 	void ReadCacheData(const std::string& filename);
 	void WriteCacheData(const std::string& filename);
 
-	std::map<std::string, ArchiveInfo> archiveInfo;
-	std::map<std::string, BrokenArchive> brokenArchives;
-	IFileFilter* CreateIgnoreFilter(CArchiveBase* ar);
+	IFileFilter* CreateIgnoreFilter(IArchive* ar);
+
 	/**
 	 * Get CRC of the data in the specified archive.
 	 * Returns 0 if file could not be opened.
 	 */
 	unsigned int GetCRC(const std::string& filename);
+
+private:
+	std::map<std::string, ArchiveInfo> archiveInfos;
+	std::map<std::string, BrokenArchive> brokenArchives;
+
 	bool isDirty;
 	std::string cachefile;
 };

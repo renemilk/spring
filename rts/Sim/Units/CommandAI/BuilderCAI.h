@@ -1,14 +1,14 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef __BUILDER_CAI_H__
-#define __BUILDER_CAI_H__
-
-#include <map>
-#include <string>
+#ifndef _BUILDER_CAI_H_
+#define _BUILDER_CAI_H_
 
 #include "MobileCAI.h"
 #include "Sim/Units/UnitSet.h"
 #include "Sim/Units/BuildInfo.h"
+
+#include <map>
+#include <string>
 
 class CUnit;
 class CFeature;
@@ -29,9 +29,7 @@ public:
 	int GetDefaultCmd(const CUnit* unit, const CFeature* feature);
 	void SlowUpdate();
 
-	void DrawCommands();
 	void GiveCommandReal(const Command& c, bool fromSynced = true);
-	void DrawQuedBuildingSquares();
 
 	/**
 	 * @param noResCheck no resources check
@@ -77,7 +75,7 @@ public:
 
 	int cachedRadiusId;
 	float cachedRadius;
-	float GetUnitDefRadius(const UnitDef* unitdef, int cmdId);
+	float GetBuildOptionRadius(const UnitDef* unitdef, int cmdId);
 
 	int buildRetries;
 
@@ -110,6 +108,7 @@ private:
 	void CancelRestrictedUnit(const std::string& buildOption);
 	bool ObjInBuildRange(const CWorldObject* obj) const;
 	bool OutOfImmobileRange(const Command& cmd) const;
+	/// add a command to reclaim a feature that is blocking our build-site
 	void ReclaimFeature(CFeature* f);
 
 	/// fix for patrolling cons repairing/resurrecting stuff that's being reclaimed
@@ -124,11 +123,12 @@ private:
 	static void AddUnitToResurrecters(CUnit*);
 	static void RemoveUnitFromResurrecters(CUnit*);
 public:
+	/**
+	 * Checks if a unit is being reclaimed by a friendly con.
+	 */
 	static bool IsUnitBeingReclaimed(CUnit* unit, CUnit* friendUnit = NULL);
 	static bool IsFeatureBeingReclaimed(int featureId, CUnit* friendUnit = NULL);
 	static bool IsFeatureBeingResurrected(int featureId, CUnit* friendUnit = NULL);
-
-private:
 };
 
-#endif // __BUILDER_CAI_H__
+#endif // _BUILDER_CAI_H_

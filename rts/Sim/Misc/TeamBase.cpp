@@ -5,8 +5,7 @@
 #include <cstdlib>
 #include <sstream>
 
-#include "Util.h"
-#include "LogOutput.h"
+#include "System/Util.h"
 
 
 unsigned char TeamBase::teamDefaultColor[10][4] =

@@ -45,8 +45,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *  http://geometrictools.com/Documentation/PlatonicSolids.pdf.
  */
 
+#include "lib/streflop/streflop_cond.h"
 #include "AssimpPCH.h"
 #include "StandardShapes.h"
+#include "System/FastMath.h"
 
 namespace Assimp	{
 
@@ -390,8 +392,8 @@ void StandardShapes::MakeCone(float height,float radius1,
 	size_t old = positions.size();
 
 	// No negative radii
-	radius1 = ::fabs(radius1);
-	radius2 = ::fabs(radius2);
+	radius1 = fabs(radius1);
+	radius2 = fabs(radius2);
 
 	float halfHeight = height / 2;
 
@@ -401,7 +403,7 @@ void StandardShapes::MakeCone(float height,float radius1,
 		std::swap(radius2,radius1);
 		halfHeight = -halfHeight;
 	}
-	else old = 0xffffffff;
+	else old = SIZE_MAX;
 
 	// Use a large epsilon to check whether the cone is pointy
 	if (radius1 < (radius2-radius1)*10e-3f)radius1 = 0.f;
@@ -424,8 +426,8 @@ void StandardShapes::MakeCone(float height,float radius1,
 		const aiVector3D v2 = aiVector3D (s * radius2,  halfHeight, t * radius2 );
 
 		const float next = angle + angle_delta;
-		float s2 = ::cos(next);
-		float t2 = ::sin(next);
+		float s2 = math::cos(next);
+		float t2 = math::sin(next);
 
 		const aiVector3D v3 = aiVector3D (s2 * radius2,  halfHeight, t2 * radius2 );
 		const aiVector3D v4 = aiVector3D (s2 * radius1, -halfHeight, t2 * radius1 );
@@ -460,10 +462,10 @@ void StandardShapes::MakeCone(float height,float radius1,
 	}
 
 	// Need to flip face order?
-	if (0xffffffff != old )
-	{
-		for (size_t s = old; s < positions.size();s += 3)
+	if ( SIZE_MAX != old )	{
+		for (size_t s = old; s < positions.size();s += 3) {
 			std::swap(positions[s],positions[s+1]);
+		}
 	}
 }
 
@@ -476,7 +478,7 @@ void StandardShapes::MakeCircle(float radius, unsigned int tess,
 	if (tess < 3 || !radius)
 		return;
 
-	radius = ::fabs(radius);
+	radius = fabs(radius);
 
 	// We will need 3 vertices per segment 
 	positions.reserve(positions.size()+tess*3);
@@ -491,8 +493,8 @@ void StandardShapes::MakeCircle(float radius, unsigned int tess,
 	{
 		positions.push_back(aiVector3D(s * radius,0.f,t * radius));
 		angle += angle_delta;
-		s = ::cos(angle);
-		t = ::sin(angle);
+		s = math::cos(angle);
+		t = math::sin(angle);
 		positions.push_back(aiVector3D(s * radius,0.f,t * radius));
 
 		positions.push_back(aiVector3D(0.f,0.f,0.f));

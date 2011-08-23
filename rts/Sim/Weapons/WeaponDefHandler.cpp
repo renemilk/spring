@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include <algorithm>
 #include <cctype>
@@ -13,17 +12,16 @@
 #include "Game/TraceRay.h"
 #include "Lua/LuaParser.h"
 #include "Rendering/Textures/ColorMap.h"
-#include "Rendering/Textures/TAPalette.h"
 #include "Sim/Misc/CategoryHandler.h"
 #include "Sim/Misc/DamageArrayHandler.h"
 #include "Sim/Misc/GlobalConstants.h"
-#include "Sim/Projectiles/Projectile.h"
-#include "System/LogOutput.h"
+#include "Sim/Units/Scripts/CobInstance.h"
+#include "System/Log/ILog.h"
 #include "System/Util.h"
 #include "System/Exceptions.h"
+#include "System/myMath.h"
 #include "System/FileSystem/FileHandler.h"
 #include "System/Sound/ISound.h"
-#include "Sim/Units/Scripts/CobInstance.h"
 
 using std::min;
 using std::max;
@@ -82,12 +80,12 @@ void CWeaponDefHandler::ParseWeapon(const LuaTable& wdTable, WeaponDef& wd)
 
 	//FIXME may be smarter to merge the collideXYZ tags with avoidXYZ and removing the collisionFlags tag (and move the code into CWeapon)?
 	wd.collisionFlags = 0;
-	const bool collideFriendly = wdTable.GetBool("collideFriendly", true);
-	const bool collideFeature  = wdTable.GetBool("collideFeature",  true);
-	const bool collideNeutral  = wdTable.GetBool("collideNeutral",  true);
-	if (!collideFriendly) { wd.collisionFlags |= Collision::NOFRIENDLIES; }
-	if (!collideFeature)  { wd.collisionFlags |= Collision::NOFEATURES;  }
-	if (!collideNeutral)  { wd.collisionFlags |= Collision::NONEUTRALS;  }
+
+	if (!wdTable.GetBool("collideEnemy",    true)) { wd.collisionFlags |= Collision::NOENEMIES;    }
+	if (!wdTable.GetBool("collideFriendly", true)) { wd.collisionFlags |= Collision::NOFRIENDLIES; }
+	if (!wdTable.GetBool("collideFeature",  true)) { wd.collisionFlags |= Collision::NOFEATURES;   }
+	if (!wdTable.GetBool("collideNeutral",  true)) { wd.collisionFlags |= Collision::NONEUTRALS;   }
+	if (!wdTable.GetBool("collideGround",   true)) { wd.collisionFlags |= Collision::NOGROUND;     }
 
 	wd.minIntensity = wdTable.GetFloat("minIntensity", 0.0f);
 
@@ -104,7 +102,6 @@ void CWeaponDefHandler::ParseWeapon(const LuaTable& wdTable, WeaponDef& wd)
 	wd.fixedLauncher = wdTable.GetBool("fixedLauncher",   false);
 	wd.noExplode     = wdTable.GetBool("noExplode",       false);
 	wd.isShield      = wdTable.GetBool("isShield",        false);
-	wd.maxvelocity   = wdTable.GetFloat("weaponVelocity", 0.0f);
 	wd.beamtime      = wdTable.GetFloat("beamTime",       1.0f);
 	wd.beamburst     = wdTable.GetBool("beamburst",       false);
 
@@ -136,16 +133,8 @@ void CWeaponDefHandler::ParseWeapon(const LuaTable& wdTable, WeaponDef& wd)
 
 	wd.type = wdTable.GetString("weaponType", "Cannon");
 
-	const bool melee = (wd.type == "Melee");
-	wd.targetBorder = wdTable.GetFloat("targetBorder", melee ? 1.0f : 0.0f);
-	if (wd.targetBorder > 1.0f) {
-		logOutput.Print("warning: targetBorder truncated to 1 (was %f)", wd.targetBorder);
-		wd.targetBorder = 1.0f;
-	} else if (wd.targetBorder < -1.0f) {
-		logOutput.Print("warning: targetBorder truncated to -1 (was %f)", wd.targetBorder);
-		wd.targetBorder = -1.0f;
-	}
-	wd.cylinderTargetting = wdTable.GetFloat("cylinderTargetting", melee ? 1.0f : 0.0f);
+	wd.targetBorder = Clamp(wdTable.GetFloat("targetBorder", (wd.type == "Melee")? 1.0f : 0.0f), -1.0f, 1.0f);
+	wd.cylinderTargetting = Clamp(wdTable.GetFloat("cylinderTargetting", (wd.type == "Melee")? 1.0f : 0.0f), 0.0f, 128.0f);
 
 	wd.range = wdTable.GetFloat("range", 10.0f);
 	const float accuracy       = wdTable.GetFloat("accuracy",   0.0f);
@@ -321,7 +310,7 @@ void CWeaponDefHandler::ParseWeapon(const LuaTable& wdTable, WeaponDef& wd)
 	if (wdTable.GetBool("toAirWeapon", false)) {
 		// fix if we sometime call aircrafts otherwise
 		wd.onlyTargetCategory = CCategoryHandler::Instance()->GetCategories("VTOL");
-		//logOutput.Print("air only weapon %s %i",weaponname.c_str(),wd.onlyTargetCategory);
+		//LOG("air only weapon %s %i", weaponname.c_str(), wd.onlyTargetCategory);
 	}
 
 	wd.largeBeamLaser = wdTable.GetBool("largeBeamLaser", false);
@@ -338,8 +327,6 @@ void CWeaponDefHandler::ParseWeapon(const LuaTable& wdTable, WeaponDef& wd)
 	} else {
 		wd.heightmod = wdTable.GetFloat("heightMod", 0.2f);
 	}
-
-	wd.supplycost = 0.0f;
 
 	wd.onlyForward = !wd.turret && (wd.type != "StarburstLauncher");
 
@@ -609,10 +596,10 @@ DamageArray CWeaponDefHandler::DynamicDamages(DamageArray damages, float3 startP
 			if (damageMin > 0)
 				dynDamages[i] = max(damages[i] * ddmod, dynDamages[i]);
 
-			// div by 0
+			// to prevent div by 0
 			dynDamages[i] = max(0.0001f, dynDamages[i]);
-//			logOutput.Print("D%i: %f (%f) - mod %f", i, dynDamages[i], damages[i], ddmod);
-//			logOutput.Print("F%i: %f - (1 - (1/%f * %f) ^ %f) * %f", i, damages[i], range, travDist, exp, damages[i]);
+//			LOG_L(L_DEBUG, "D%i: %f (%f) - mod %f", i, dynDamages[i], damages[i], ddmod);
+//			LOG_L(L_DEBUG, "F%i: %f - (1 - (1/%f * %f) ^ %f) * %f", i, damages[i], range, travDist, exp, damages[i]);
 		}
 	}
 	else {
@@ -624,8 +611,8 @@ DamageArray CWeaponDefHandler::DynamicDamages(DamageArray damages, float3 startP
 
 			// div by 0
 			dynDamages[i] = max(0.0001f, dynDamages[i]);
-//			logOutput.Print("D%i: %f (%f) - mod %f", i, dynDamages[i], damages[i], ddmod);
-//			logOutput.Print("F%i: (1 - (1/%f * %f) ^ %f) * %f", i, range, travDist, exp, damages[i]);
+//			LOG_L(L_DEBUG, "D%i: %f (%f) - mod %f", i, dynDamages[i], damages[i], ddmod);
+//			LOG_L(L_DEBUG, "F%i: (1 - (1/%f * %f) ^ %f) * %f", i, range, travDist, exp, damages[i]);
 		}
 	}
 	return dynDamages;

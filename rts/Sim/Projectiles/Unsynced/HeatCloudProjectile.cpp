@@ -1,15 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Game/Camera.h"
 #include "HeatCloudProjectile.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CHeatCloudProjectile, CProjectile, );
 
@@ -47,14 +45,14 @@ CHeatCloudProjectile::CHeatCloudProjectile()
 	texture = projectileDrawer->heatcloudtex;
 }
 
-CHeatCloudProjectile::CHeatCloudProjectile(const float3 pos, const float3 speed, const  float temperature, const float size, CUnit* owner)
-: CProjectile(pos, speed, owner, false, false, false),
-	heat(temperature),
-	maxheat(temperature),
-	heatFalloff(1.0f),
-	size(0.0f),
-	sizemod(0.0f),
-	sizemodmod(0.0f)
+CHeatCloudProjectile::CHeatCloudProjectile(const float3& pos, const float3& speed, const  float temperature, const float size, CUnit* owner)
+	: CProjectile(pos, speed, owner, false, false, false)
+	, heat(temperature)
+	, maxheat(temperature)
+	, heatFalloff(1.0f)
+	, size(0.0f)
+	, sizemod(0.0f)
+	, sizemodmod(0.0f)
 {
 	sizeGrowth = size / temperature;
 	checkCol = false;
@@ -65,12 +63,10 @@ CHeatCloudProjectile::CHeatCloudProjectile(const float3 pos, const float3 speed,
 
 CHeatCloudProjectile::~CHeatCloudProjectile()
 {
-
 }
 
 void CHeatCloudProjectile::Update()
 {
-//	speed.y+=GRAVITY*0.3f;
 	pos += speed;
 	heat -= heatFalloff;
 	if (heat <= 0) {

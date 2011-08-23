@@ -5,7 +5,7 @@
 #define __FARTEXTURE_HANDLER_H__
 
 #include <vector>
-#include "Vec2.h"
+#include "System/Vec2.h"
 #include "GL/myGL.h"
 #include "Rendering/GL/FBO.h"
 
@@ -20,7 +20,6 @@ class CFarTextureHandler
 public:
 	CFarTextureHandler();
 	~CFarTextureHandler();
-	GLuint GetTextureID() const { return farTexture; }
 
 	void Queue(const CSolidObject* obj);
 	void Draw();
@@ -37,8 +36,8 @@ private:
 	std::vector< std::vector<int> > cache;
 
 	FBO fbo;
-	GLuint farTexture;
-	int usedFarTextures;
+	unsigned int farTextureID;
+	unsigned int usedFarTextures;
 
 	float2 GetTextureCoords(const int& farTextureNum, const int& orientation);
 	void DrawFarTexture(const CSolidObject* obj, CVertexArray*);

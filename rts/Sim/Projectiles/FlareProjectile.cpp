@@ -1,12 +1,11 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "FlareProjectile.h"
 #include "Game/Camera.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
@@ -14,7 +13,6 @@
 #include "Sim/Projectiles/WeaponProjectiles/MissileProjectile.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/Unit.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CFlareProjectile, CProjectile, (ZeroVector, ZeroVector, 0, 0));
 

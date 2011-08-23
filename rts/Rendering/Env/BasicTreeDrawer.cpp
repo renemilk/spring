@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "BasicTreeDrawer.h"
 #include "Game/Camera.h"
@@ -9,12 +8,11 @@
 #include "Map/Ground.h"
 #include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/Bitmap.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Exceptions.h"
-#include "System/GlobalUnsynced.h"
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -31,7 +29,7 @@ CBasicTreeDrawer::CBasicTreeDrawer()
 {
 	LuaParser resourcesParser("gamedata/resources.lua", SPRING_VFS_MOD_BASE, SPRING_VFS_ZIP);
 	if (!resourcesParser.Execute()) {
-		logOutput.Print(resourcesParser.GetErrorLog());
+		LOG_L(L_ERROR, "%s", resourcesParser.GetErrorLog().c_str());
 	}
 
 	const LuaTable treesTable = resourcesParser.GetRoot().SubTable("graphics").SubTable("trees");
@@ -347,7 +345,7 @@ void CBasicTreeDrawer::Draw(float treeDistance, bool drawReflection)
 	glEnable(GL_TEXTURE_2D);
 	glEnable(GL_ALPHA_TEST);
 
-	IBaseSky::SetFog();
+	ISky::SetupFog();
 	glColor4f(1, 1, 1, 1);
 
 	const int cx = (int)(camera->pos.x / (SQUARE_SIZE * TREE_SQUARE_SIZE));

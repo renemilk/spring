@@ -34,7 +34,6 @@
 // Please note: Some functions may require more advanced coding to implement
 // If a function is not yet supported by GML, a compile error pointing to 'GML_FUNCTION_NOT_IMPLEMENTED' will occur
 
-#include "StdAfx.h"
 
 #ifdef USE_GML
 
@@ -42,12 +41,17 @@
 #include "gmlcls.h"
 #include "gmlque.h"
 
-#include "LogOutput.h"
+#include "Game/UI/KeyBindings.h"
+#include "Lua/LuaConfig.h"
+#include "System/Log/ILog.h"
 #include "System/Platform/Threading.h"
 
 
 const char *gmlProfMutex = "lua";
 unsigned gmlLockTime = 0;
+
+int gmlProcNumLoop = 25;
+int gmlProcInterval = 8;
 
 #define EXEC_RUN (BYTE *)NULL
 #define EXEC_SYNC (BYTE *)-1
@@ -151,8 +155,9 @@ void gmlInit() {
 		gmlGetFloatvCache[gmlFloatParams[i]]=fi;
 	}
 	for(int i=0; i<sizeof(gmlStringParams)/sizeof(GLenum); ++i) {
-		std::string si=(char *)glGetString(gmlStringParams[i]);
-		gmlGetStringCache[gmlStringParams[i]]=si;
+		const char* pstring = (const char*) glGetString(gmlStringParams[i]);
+		const std::string si = (pstring != NULL)? pstring: "[NULL]";
+		gmlGetStringCache[gmlStringParams[i]] = si;
 	}
 	gmlInited=TRUE;
 }
@@ -225,7 +230,6 @@ boost::mutex posmutex;
 boost::mutex runitmutex;
 boost::mutex netmutex;
 boost::mutex histmutex;
-boost::mutex logmutex;
 boost::mutex timemutex;
 boost::mutex watermutex;
 boost::mutex dquemutex;
@@ -243,11 +247,14 @@ boost::mutex olbatchmutex;
 boost::mutex plbatchmutex;
 boost::mutex glbatchmutex;
 boost::mutex mlbatchmutex;
+boost::mutex llbatchmutex;
 boost::mutex cmdmutex;
 boost::mutex luauimutex;
 boost::mutex xcallmutex;
 boost::mutex blockmutex;
 boost::mutex tnummutex;
+boost::mutex ntexmutex;
+boost::mutex lodmutex;
 
 #include <boost/thread/recursive_mutex.hpp>
 boost::recursive_mutex unitmutex;
@@ -274,6 +281,27 @@ boost::mutex lmmutex;
 std::map<std::string, int> lockmaps[GML_MAX_NUM_THREADS];
 std::map<boost::recursive_mutex *, int> lockmmaps[GML_MAX_NUM_THREADS];
 #endif
+
+void PrintMTStartupMessage(int showMTInfo) {
+	if (showMTInfo != MT_LUA_NONE) {
+		LOG("\n************** SPRING MULTITHREADING VERSION IMPORTANT NOTICE **************");
+		LOG("Engine or game settings have forced Spring MT to use compatibility mode %d", showMTInfo);
+		if (showMTInfo == MT_LUA_SINGLE) {
+			CKeyBindings::HotkeyList lslist = keyBindings->GetHotkeys("luaui selector");
+			std::string lskey = lslist.empty() ? "" : " (press " + lslist.front() + ")";
+			LOG("If your game uses lua based rendering, it may run very slow with Spring MT");
+			LOG("A high LUA-SYNC-CPU(MT) value in the upper right corner could indicate a problem");
+			LOG("Consider changing the engine setting 'MultiThreadLua' to 2 to improve performance,");
+			LOG("or try to disable LuaShaders and all rendering widgets%s\n", lskey.c_str());
+		} else if (showMTInfo == MT_LUA_SINGLE_BATCH) {
+			LOG("If your game uses lua gadget based rendering, it may run very slow with Spring MT");
+			LOG("A high LUA-SYNC-CPU(MT) value in the upper right corner could indicate a problem\n");
+		} else if (showMTInfo == MT_LUA_DUAL_EXPORT) {
+			LOG("If your game uses lua gadgets that export data, it may run very slow with Spring MT");
+			LOG("A high LUA-EXP-SIZE(MT) value in the upper right corner could indicate a problem\n");
+		}
+	}
+}
 
 #endif
 
@@ -1056,12 +1084,12 @@ void gmlQueue::ExecuteDebug() {
 
 	while(p<e) {
 		if(*(int *)p!=GML_NOP)
-			logOutput.Print("GML error: Sim thread called %s",gmlFunctionNames[*(int *)p]);
+			LOG_SL("GML", L_ERROR, "Sim thread called %s", gmlFunctionNames[*(int*)p]);
 		QueueHandler(p,ptr);
 //		++procs;
 	}
 //	if(procs>1 || (procs==1 && *(int *)Read!=GML_NOP))
-//		logOutput.Print("GML error: %d OpenGL calls detected in SimFrame()",procs);
+//		LOG_SL("GML", L_ERROR, "%d OpenGL calls detected in SimFrame()", procs);
 }
 
 #include "gmlsrv.h"

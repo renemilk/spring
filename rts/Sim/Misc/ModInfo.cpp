@@ -1,22 +1,22 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ModInfo.h"
 
 #include "Game/GameSetup.h"
+#include "Lua/LuaConfig.h"
 #include "Lua/LuaParser.h"
 #include "Lua/LuaSyncedRead.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitTypes/Builder.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
-#include "System/ConfigHandler.h"
+#include "System/Log/ILog.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/FileSystem/ArchiveScanner.h"
 #include "System/Exceptions.h"
 
+CONFIG(bool, TeamNanoSpray).defaultValue(true);
 
 CModInfo modInfo;
 
@@ -43,8 +43,8 @@ void CModInfo::Init(const char* modArchive)
 	parser.EndTable();
 	parser.Execute();
 	if (!parser.IsValid()) {
-		logOutput.Print("Error loading modrules, using defaults");
-		logOutput.Print(parser.GetErrorLog());
+		LOG_L(L_ERROR, "Failed loading mod-rules, using defaults; error: %s",
+				parser.GetErrorLog().c_str());
 	}
 	const LuaTable root = parser.GetRoot();
 
@@ -57,7 +57,7 @@ void CModInfo::Init(const char* modArchive)
 	allowTeamColors = nanosprayTbl.GetBool("allow_team_colors", true);
 	if (allowTeamColors) {
 		// Load the users preference for team coloured nanospray
-		globalRendering->teamNanospray = !!configHandler->Get("TeamNanoSpray", 1);
+		globalRendering->teamNanospray = configHandler->GetBool("TeamNanoSpray");
 	}
 
 	// constructions
@@ -127,7 +127,7 @@ void CModInfo::Init(const char* modArchive)
 	requireSonarUnderWater = sensors.GetBool("requireSonarUnderWater", true);
 	/// LoS
 	const LuaTable los = sensors.SubTable("los");
-	// losMipLevel is used as index to readmap->mipHeightmap,
+	// losMipLevel is used as index to readmap->mipHeightmaps,
 	// so the max value is CReadMap::numHeightMipMaps - 1
 	losMipLevel = los.GetInt("losMipLevel", 1);
 	losMul = los.GetFloat("losMul", 1.0f);
@@ -145,5 +145,5 @@ void CModInfo::Init(const char* modArchive)
 	airLosMul = los.GetFloat("airLosMul", 1.0f);
 
 	const LuaTable system = root.SubTable("system");
-	luaThreadingModel = system.GetInt("luaThreadingModel", 2);
+	luaThreadingModel = system.GetInt("luaThreadingModel", MT_LUA_SINGLE_BATCH);
 }

@@ -1,12 +1,11 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include <set>
 #include <list>
 #include <cctype>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaSyncedCtrl.h"
 
@@ -15,6 +14,7 @@
 #include "LuaRules.h" // for MAX_LUA_COB_ARGS
 #include "LuaHandleSynced.h"
 #include "LuaHashString.h"
+#include "LuaMetalMap.h"
 #include "LuaSyncedMoveCtrl.h"
 #include "LuaUtils.h"
 #include "Game/Game.h"
@@ -23,7 +23,6 @@
 #include "Game/GameHelper.h"
 #include "Game/PlayerHandler.h"
 #include "Game/SelectedUnits.h"
-#include "Sim/Misc/Team.h"
 #include "Map/Ground.h"
 #include "Map/MapDamage.h"
 #include "Map/MapInfo.h"
@@ -36,10 +35,10 @@
 #include "Sim/Misc/DamageArray.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/SmoothHeightMesh.h"
+#include "Sim/Misc/Team.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/QuadField.h"
-#include "Sim/MoveTypes/AirMoveType.h"
-#include "Sim/MoveTypes/TAAirMoveType.h"
+#include "Sim/MoveTypes/AAirMoveType.h"
 #include "Sim/Path/IPathManager.h"
 #include "Sim/Projectiles/ExplosionGenerator.h"
 #include "Sim/Projectiles/Projectile.h"
@@ -59,16 +58,16 @@
 #include "Sim/Units/CommandAI/Command.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
 #include "Sim/Units/CommandAI/FactoryCAI.h"
-#include "Sim/Units/CommandAI/LineDrawer.h"
 #include "Sim/Units/UnitTypes/ExtractorBuilding.h"
 #include "Sim/Weapons/PlasmaRepulser.h"
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
-#include "myMath.h"
-#include "LogOutput.h"
+#include "System/myMath.h"
+#include "System/Log/ILog.h"
 #include "LuaHelper.h"
 
-using namespace std;
+using std::max;
+using std::min;
 
 
 /******************************************************************************/
@@ -156,6 +155,7 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetUnitMetalExtraction);
 	REGISTER_LUA_CFUNC(SetUnitBuildSpeed);
 	REGISTER_LUA_CFUNC(SetUnitBlocking);
+	REGISTER_LUA_CFUNC(SetUnitCrashing);
 	REGISTER_LUA_CFUNC(SetUnitShieldState);
 	REGISTER_LUA_CFUNC(SetUnitFlanking);
 	REGISTER_LUA_CFUNC(SetUnitTravel);
@@ -247,13 +247,14 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetExperienceGrade);
 
 
-	if (!LuaSyncedMoveCtrl::PushMoveCtrl(L)) {
+	if (!LuaSyncedMoveCtrl::PushMoveCtrl(L))
 		return false;
-	}
 
-	if (!CLuaUnitScript::PushEntries(L)) {
+	if (!CLuaUnitScript::PushEntries(L))
 		return false;
-	}
+
+	if (!LuaMetalMap::PushCtrlEntries(L))
+		return false;
 
 	return true;
 }
@@ -375,21 +376,31 @@ int LuaSyncedCtrl::GameOver(lua_State* L)
 {
 	if (!lua_istable(L, 1)) {
 		luaL_error(L, "Incorrect arguments to GameOver()");
+		return 0;
 	}
+
 	std::vector<unsigned char> winningAllyTeams;
-	const int table = 1;
-	for (lua_pushnil(L); lua_next(L, table) != 0; lua_pop(L, 1)) {
+
+	static const int tableIdx = 1;
+
+	for (lua_pushnil(L); lua_next(L, tableIdx) != 0; lua_pop(L, 1)) {
 		if (!lua_israwnumber(L, -1)) {
 			continue;
 		}
-		unsigned char AllyTeamID = lua_toint( L, -1 );
-		if ( !teamHandler->ValidAllyTeam(AllyTeamID) ) {
+
+		const unsigned char allyTeamID = lua_toint(L, -1);
+
+		if (!teamHandler->ValidAllyTeam(allyTeamID)) {
 			continue;
 		}
-		winningAllyTeams.push_back( AllyTeamID );
+
+		winningAllyTeams.push_back(allyTeamID);
 	}
-	game->GameEnd( winningAllyTeams );
-	return 0;
+
+	game->GameEnd(winningAllyTeams);
+	// push the number of accepted allyteams
+	lua_pushnumber(L, winningAllyTeams.size());
+	return 1;
 }
 
 
@@ -438,7 +449,7 @@ int LuaSyncedCtrl::UseTeamResource(lua_State* L)
 	if (lua_isstring(L, 2)) {
 		const string type = lua_tostring(L, 2);
 
-		const float value = max(0.0f, float(lua_tonumber(L, 3)));
+		const float value = max(0.0f, luaL_checkfloat(L, 3));
 
 		if ((type == "m") || (type == "metal")) {
 			team->metalPull += value;
@@ -458,7 +469,7 @@ int LuaSyncedCtrl::UseTeamResource(lua_State* L)
 		for (lua_pushnil(L); lua_next(L, table) != 0; lua_pop(L, 1)) {
 			if (lua_israwstring(L, -2) && lua_isnumber(L, -1)) {
 				const string key = lua_tostring(L, -2);
-				const float value = max(0.0f, float(lua_tonumber(L, -1)));
+				const float value = max(0.0f, lua_tofloat(L, -1));
 				if ((key == "m") || (key == "metal")) {
 					metal = value;
 				} else if ((key == "e") || (key == "energy")) {
@@ -503,18 +514,18 @@ int LuaSyncedCtrl::SetTeamResource(lua_State* L)
 	const float value = max(0.0f, luaL_checkfloat(L, 3));
 
 	if ((type == "m") || (type == "metal")) {
-		team->metal = min(team->metalStorage, value);
+		team->metal = min<float>(team->metalStorage, value);
 	}
 	else if ((type == "e") || (type == "energy")) {
-		team->energy = min(team->energyStorage, value);
+		team->energy = min<float>(team->energyStorage, value);
 	}
 	else if ((type == "ms") || (type == "metalStorage")) {
 		team->metalStorage = value;
-		team->metal = min((float)team->metal, team->metalStorage);
+		team->metal = min<float>(team->metal, team->metalStorage);
 	}
 	else if ((type == "es") || (type == "energyStorage")) {
 		team->energyStorage = value;
-		team->energy = min((float)team->energy, team->energyStorage);
+		team->energy = min<float>(team->energy, team->energyStorage);
 	}
 	return 0;
 }
@@ -575,7 +586,7 @@ int LuaSyncedCtrl::ShareTeamResource(lua_State* L)
 	float amount = luaL_checkfloat(L, 4);
 
 	if (type == "metal") {
-		amount = std::min(amount, team1->metal);
+		amount = std::min(amount, (float)team1->metal);
 		if (!luaRules || luaRules->AllowResourceTransfer(teamID1, teamID2, "m", amount)) {
 			team1->metal                       -= amount;
 			team1->metalSent                   += amount;
@@ -585,7 +596,7 @@ int LuaSyncedCtrl::ShareTeamResource(lua_State* L)
 			team2->currentStats->metalReceived += amount;
 		}
 	} else if (type == "energy") {
-		amount = std::min(amount, team1->energy);
+		amount = std::min(amount, (float)team1->energy);
 		if (!luaRules || luaRules->AllowResourceTransfer(teamID1, teamID2, "e", amount)) {
 			team1->energy                       -= amount;
 			team1->energySent                   += amount;
@@ -882,8 +893,8 @@ int LuaSyncedCtrl::CreateUnit(lua_State* L)
 		return 0; // unit limit reached
 	}
 
-	ASSERT_SYNCED_FLOAT3(pos);
-	ASSERT_SYNCED_PRIMITIVE(facing);
+	ASSERT_SYNCED(pos);
+	ASSERT_SYNCED(facing);
 
 	// FIXME -- allow specifying the 'builder' parameter?
 	inCreateUnit = true;
@@ -929,7 +940,7 @@ int LuaSyncedCtrl::DestroyUnit(lua_State* L)
 		luaL_error(L, "DestroyUnit() recursion is not permitted");
 	}
 	inDestroyUnit = true;
-	ASSERT_SYNCED_PRIMITIVE(unit->id);
+	ASSERT_SYNCED(unit->id);
 	unit->KillUnit(selfd, reclaimed, attacker);
 	inDestroyUnit = false;
 
@@ -963,9 +974,9 @@ int LuaSyncedCtrl::TransferUnit(lua_State* L)
 		luaL_error(L, "TransferUnit() recursion is not permitted");
 	}
 	inTransferUnit = true;
-	ASSERT_SYNCED_PRIMITIVE(unit->id);
-	ASSERT_SYNCED_PRIMITIVE((int)newTeam);
-	ASSERT_SYNCED_PRIMITIVE(given);
+	ASSERT_SYNCED(unit->id);
+	ASSERT_SYNCED((int)newTeam);
+	ASSERT_SYNCED(given);
 	unit->ChangeTeam(newTeam, given ? CUnit::ChangeGiven
 	                                : CUnit::ChangeCaptured);
 	inTransferUnit = false;
@@ -991,8 +1002,8 @@ int LuaSyncedCtrl::SetUnitCosts(lua_State* L)
 			continue;
 		}
 		const string key = lua_tostring(L, -2);
-		const float value = lua_tonumber(L, -1);
-		ASSERT_SYNCED_PRIMITIVE((float)value);
+		const float value = lua_tofloat(L, -1);
+		ASSERT_SYNCED((float)value);
 
 		if (key == "buildTime") {
 			unit->buildTime  = max(1.0f, value);
@@ -1062,8 +1073,8 @@ int LuaSyncedCtrl::SetUnitResourcing(lua_State* L)
 				continue;
 			}
 			const string key = lua_tostring(L, -2);
-			const float value = lua_tonumber(L, -1);
-			ASSERT_SYNCED_PRIMITIVE((float)value);
+			const float value = lua_tofloat(L, -1);
+			ASSERT_SYNCED((float)value);
 
 			SetUnitResourceParam(unit, key, value);
 		}
@@ -1386,7 +1397,7 @@ int LuaSyncedCtrl::SetUnitCloak(lua_State* L)
 	else if (lua_isboolean(L, 3)) {
 		const float defDist = unit->unitDef->decloakDistance;
 		if (lua_toboolean(L, 3)) {
-			unit->decloakDistance = streflop::fabsf(defDist);
+			unit->decloakDistance = math::fabsf(defDist);
 		} else {
 			unit->decloakDistance = defDist;
 		}
@@ -1527,6 +1538,33 @@ int LuaSyncedCtrl::SetUnitBlocking(lua_State* L)
 }
 
 
+int LuaSyncedCtrl::SetUnitCrashing(lua_State* L) {
+	CUnit* unit = ParseUnit(L, __FUNCTION__, 1);
+
+	if (unit == NULL) {
+		return 0;
+	}
+
+	AAirMoveType* amt = dynamic_cast<AAirMoveType*>(unit->moveType);
+
+	if (amt != NULL) {
+		const bool crash = (lua_isboolean(L, 2) && lua_toboolean(L, 2));
+		const AAirMoveType::AircraftState state = crash?
+			AAirMoveType::AIRCRAFT_CRASHING:
+			AAirMoveType::AIRCRAFT_FLYING;
+
+		// note: this really only makes sense to call
+		// once, passing true for the second argument
+		amt->SetState(state);
+		lua_pushboolean(L, true);
+	} else {
+		lua_pushboolean(L, false);
+	}
+
+	return 1;
+}
+
+
 int LuaSyncedCtrl::SetUnitShieldState(lua_State* L)
 {
 	CUnit* unit = ParseUnit(L, __FUNCTION__, 1);
@@ -1645,13 +1683,13 @@ int LuaSyncedCtrl::SetUnitTarget(lua_State* L)
 		const float3 pos(luaL_checkfloat(L, 2),
 		                 luaL_checkfloat(L, 3),
 		                 luaL_checkfloat(L, 4));
-		const bool dgun = lua_isboolean(L, 5) && lua_toboolean(L, 5);
-		unit->AttackGround(pos, dgun);
+		const bool manualFire = lua_isboolean(L, 5) && lua_toboolean(L, 5);
+		unit->AttackGround(pos, manualFire);
 	}
 	else if (args >= 2) {
 		CUnit* target = ParseRawUnit(L, __FUNCTION__, 2);
-		const bool dgun = lua_isboolean(L, 3) && lua_toboolean(L, 3);
-		unit->AttackUnit(target, dgun);
+		const bool manualFire = lua_isboolean(L, 3) && lua_toboolean(L, 3);
+		unit->AttackUnit(target, manualFire);
 	}
 	return 0;
 }
@@ -1848,9 +1886,7 @@ int LuaSyncedCtrl::SetUnitPhysics(lua_State* L)
 	unit->frontdir.y = matrix[ 9];
 	unit->frontdir.z = matrix[10];
 
-	const shortint2 HandP = GetHAndPFromVector(unit->frontdir);
-	unit->heading = HandP.x;
-
+	unit->SetHeadingFromDirection();
 	unit->ForcedMove(pos);
 	return 0;
 }
@@ -1901,17 +1937,8 @@ int LuaSyncedCtrl::SetUnitRotation(lua_State* L)
 	matrix.RotateX(rot.x);
 	matrix.RotateY(rot.y);
 
-	unit->rightdir.x = -matrix[ 0];
-	unit->rightdir.y = -matrix[ 1];
-	unit->rightdir.z = -matrix[ 2];
-	unit->updir.x    =  matrix[ 4];
-	unit->updir.y    =  matrix[ 5];
-	unit->updir.z    =  matrix[ 6];
-	unit->frontdir.x =  matrix[ 8];
-	unit->frontdir.y =  matrix[ 9];
-	unit->frontdir.z =  matrix[10];
-
-	unit->heading = GetHeadingFromVector(unit->frontdir.x, unit->frontdir.z);
+	unit->SetDirVectors(matrix);
+	unit->SetHeadingFromDirection();
 	unit->ForcedMove(unit->pos);
 
 	return 0;
@@ -1924,10 +1951,12 @@ int LuaSyncedCtrl::SetUnitVelocity(lua_State* L)
 	if (unit == NULL) {
 		return 0;
 	}
-	float3 dir(luaL_checkfloat(L, 2),
-	           luaL_checkfloat(L, 3),
-	           luaL_checkfloat(L, 4));
-	unit->speed = dir;
+
+	const float3 speed(Clamp(luaL_checkfloat(L, 2), -MAX_UNIT_SPEED, MAX_UNIT_SPEED),
+	                   Clamp(luaL_checkfloat(L, 3), -MAX_UNIT_SPEED, MAX_UNIT_SPEED),
+	                   Clamp(luaL_checkfloat(L, 4), -MAX_UNIT_SPEED, MAX_UNIT_SPEED));
+	unit->speed = speed;
+
 	return 0;
 }
 
@@ -1942,9 +1971,9 @@ int LuaSyncedCtrl::AddUnitDamage(lua_State* L)
 	const int paralyze   = luaL_optint(L, 3, 0);
 	const int attackerID = luaL_optint(L, 4, -1);
 	const int weaponID   = luaL_optint(L, 5, -1);
-	const float3 impulse = float3(luaL_optfloat(L, 6, 0.0f),
-	                              luaL_optfloat(L, 7, 0.0f),
-	                              luaL_optfloat(L, 8, 0.0f));
+	const float3 impulse = float3(Clamp(luaL_optfloat(L, 6, 0.0f), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE),
+	                              Clamp(luaL_optfloat(L, 7, 0.0f), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE),
+	                              Clamp(luaL_optfloat(L, 8, 0.0f), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE));
 
 	CUnit* attacker = NULL;
 	if (attackerID >= 0) {
@@ -1975,9 +2004,10 @@ int LuaSyncedCtrl::AddUnitImpulse(lua_State* L)
 	if (unit == NULL) {
 		return 0;
 	}
-	float3 impulse(luaL_checkfloat(L, 2),
-	               luaL_checkfloat(L, 3),
-	               luaL_checkfloat(L, 4));
+
+	const float3 impulse(Clamp(luaL_checkfloat(L, 2), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE),
+	                     Clamp(luaL_checkfloat(L, 3), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE),
+	                     Clamp(luaL_checkfloat(L, 4), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE));
 	unit->AddImpulse(impulse);
 	return 0;
 }
@@ -2027,7 +2057,7 @@ int LuaSyncedCtrl::UseUnitResource(lua_State* L)
 
 	if (lua_isstring(L, 2)) {
 		const string type = lua_tostring(L, 2);
-		const float value = max(0.0f, float(lua_tonumber(L, 3)));
+		const float value = max(0.0f, lua_tofloat(L, 3));
 
 		if ((type == "m") || (type == "metal")) {
 			lua_pushboolean(L, unit->UseMetal(value));
@@ -2044,7 +2074,7 @@ int LuaSyncedCtrl::UseUnitResource(lua_State* L)
 		for (lua_pushnil(L); lua_next(L, table) != 0; lua_pop(L, 1)) {
 			if (lua_israwstring(L, -2) && lua_isnumber(L, -1)) {
 				const string key = lua_tostring(L, -2);
-				const float value = max(0.0f, float(lua_tonumber(L, -1)));
+				const float value = max(0.0f, lua_tofloat(L, -1));
 				if ((key == "m") || (key == "metal")) {
 					metal = value;
 				} else if ((key == "e") || (key == "energy")) {
@@ -2529,8 +2559,7 @@ int LuaSyncedCtrl::GiveOrderToUnit(lua_State* L)
 		luaL_error(L, "Invalid unitID given to GiveOrderToUnit()");
 	}
 
-	Command cmd;
-	LuaUtils::ParseCommand(L, __FUNCTION__, 2, cmd);
+	Command cmd = LuaUtils::ParseCommand(L, __FUNCTION__, 2);
 
 	if (!CanControlUnit(L, unit)) {
 		lua_pushboolean(L, false);
@@ -2564,8 +2593,7 @@ int LuaSyncedCtrl::GiveOrderToUnitMap(lua_State* L)
 		return 1;
 	}
 
-	Command cmd;
-	LuaUtils::ParseCommand(L, __FUNCTION__, 2, cmd);
+	Command cmd = LuaUtils::ParseCommand(L, __FUNCTION__, 2);
 
 	if (inGiveOrder) {
 		luaL_error(L, "GiveOrderToUnitMap() recursion is not permitted");
@@ -2601,8 +2629,7 @@ int LuaSyncedCtrl::GiveOrderToUnitArray(lua_State* L)
 		return 1;
 	}
 
-	Command cmd;
-	LuaUtils::ParseCommand(L, __FUNCTION__, 2, cmd);
+	Command cmd = LuaUtils::ParseCommand(L, __FUNCTION__, 2);
 
 	if (inGiveOrder) {
 		luaL_error(L, "GiveOrderToUnitArray() recursion is not permitted");
@@ -2731,10 +2758,10 @@ static void ParseParams(lua_State* L, const char* caller, float& factor,
 		fz2    = luaL_checkfloat(L, 4);
 		factor = luaL_checkfloat(L, 5);
 		if (fx1 > fx2) {
-			swap(fx1, fx2);
+			std::swap(fx1, fx2);
 		}
 		if (fz1 > fz2) {
-			swap(fz1, fz2);
+			std::swap(fz1, fz2);
 		}
 	}
 	else {
@@ -2766,7 +2793,7 @@ int LuaSyncedCtrl::LevelHeightMap(lua_State* L)
 
 	for (int z = z1; z <= z2; z++) {
 		for (int x = x1; x <= x2; x++) {
-			const int index = (z * (gs->mapx + 1)) + x;
+			const int index = (z * gs->mapxp1) + x;
 			readmap->SetHeight(index, height);
 		}
 	}
@@ -2787,7 +2814,7 @@ int LuaSyncedCtrl::AdjustHeightMap(lua_State* L)
 
 	for (int z = z1; z <= z2; z++) {
 		for (int x = x1; x <= x2; x++) {
-			const int index = (z * (gs->mapx + 1)) + x;
+			const int index = (z * gs->mapxp1) + x;
 			readmap->AddHeight(index, height);
 		}
 	}
@@ -2806,13 +2833,13 @@ int LuaSyncedCtrl::RevertHeightMap(lua_State* L)
 	int x1, x2, z1, z2;
 	ParseMapParams(L, __FUNCTION__, origFactor, x1, z1, x2, z2);
 
-	const float* origMap = readmap->orgheightmap;
-	const float* currMap = readmap->GetHeightmap();
+	const float* origMap = readmap->GetOriginalHeightMapSynced();
+	const float* currMap = readmap->GetCornerHeightMapSynced();
 
 	if (origFactor == 1.0f) {
 		for (int z = z1; z <= z2; z++) {
 			for (int x = x1; x <= x2; x++) {
-				const int idx = (z * (gs->mapx + 1)) + x;
+				const int idx = (z * gs->mapxp1) + x;
 
 				readmap->SetHeight(idx, origMap[idx]);
 			}
@@ -2822,7 +2849,7 @@ int LuaSyncedCtrl::RevertHeightMap(lua_State* L)
 		const float currFactor = (1.0f - origFactor);
 		for (int z = z1; z <= z2; z++) {
 			for (int x = x1; x <= x2; x++) {
-				const int index = (z * (gs->mapx + 1)) + x;
+				const int index = (z * gs->mapxp1) + x;
 				const float ofh = origFactor * origMap[index];
 				const float cfh = currFactor * currMap[index];
 				readmap->SetHeight(index, ofh + cfh);
@@ -2857,9 +2884,9 @@ int LuaSyncedCtrl::AddHeightMap(lua_State* L)
 		return 0;
 	}
 
-	const int index = (z * (gs->mapx + 1)) + x;
-	const float oldHeight = readmap->GetHeightmap()[index];
-	heightMapAmountChanged += streflop::fabsf(h);
+	const int index = (z * gs->mapxp1) + x;
+	const float oldHeight = readmap->GetCornerHeightMapSynced()[index];
+	heightMapAmountChanged += math::fabsf(h);
 
 	// update RecalcArea()
 	if (x < heightMapx1) { heightMapx1 = x; }
@@ -2894,8 +2921,8 @@ int LuaSyncedCtrl::SetHeightMap(lua_State* L)
 		return 0;
 	}
 
-	const int index = (z * (gs->mapx + 1)) + x;
-	const float oldHeight = readmap->GetHeightmap()[index];
+	const int index = (z * gs->mapxp1) + x;
+	const float oldHeight = readmap->GetCornerHeightMapSynced()[index];
 	float height = oldHeight;
 
 	if (lua_israwnumber(L, 4)) {
@@ -2906,7 +2933,7 @@ int LuaSyncedCtrl::SetHeightMap(lua_State* L)
 	}
 
 	const float heightDiff = (height - oldHeight);
-	heightMapAmountChanged += streflop::fabsf(heightDiff);
+	heightMapAmountChanged += math::fabsf(heightDiff);
 
 	// update RecalcArea()
 	if (x < heightMapx1) { heightMapx1 = x; }
@@ -2946,7 +2973,7 @@ int LuaSyncedCtrl::SetHeightMapFunc(lua_State* L)
 	inHeightMap = false;
 
 	if (error != 0) {
-		logOutput.Print("Spring.SetHeightMapFunc: error(%i) = %s",
+		LOG_L(L_ERROR, "Spring.SetHeightMapFunc: error(%i) = %s",
 				error, lua_tostring(L, -1));
 		lua_error(L);
 	}
@@ -3058,7 +3085,7 @@ int LuaSyncedCtrl::AddSmoothMesh(lua_State *L)
 
 	const int index = (z * smoothGround->GetMaxX()) + x;
 	const float oldHeight = smoothGround->GetMeshData()[index];
-	smoothMeshAmountChanged += streflop::fabsf(h);
+	smoothMeshAmountChanged += math::fabsf(h);
 
 	smoothGround->AddHeight(index, h);
 	// push the new height
@@ -3098,7 +3125,7 @@ int LuaSyncedCtrl::SetSmoothMesh(lua_State *L)
 	}
 
 	const float heightDiff = (height - oldHeight);
-	smoothMeshAmountChanged += streflop::fabsf(heightDiff);
+	smoothMeshAmountChanged += math::fabsf(heightDiff);
 
 	smoothGround->SetHeight(index, height);
 	lua_pushnumber(L, heightDiff);
@@ -3123,7 +3150,7 @@ int LuaSyncedCtrl::SetSmoothMeshFunc(lua_State *L)
 	inSmoothMesh = false;
 
 	if (error != 0) {
-		logOutput.Print("Spring.SetSmoothMeshFunc: error(%i) = %s",
+		LOG_L(L_ERROR, "Spring.SetSmoothMeshFunc: error(%i) = %s",
 				error, lua_tostring(L, -1));
 		lua_error(L);
 	}
@@ -3147,10 +3174,10 @@ int LuaSyncedCtrl::SetMapSquareTerrainType(lua_State* L)
 	const int tx = hx >> 1;
 	const int tz = hz >> 1;
 
-	const int ott = readmap->typemap[tz * gs->hmapx + tx];
+	const int ott = readmap->GetTypeMapSynced()[tz * gs->hmapx + tx];
 	const int ntt = luaL_checkint(L, 3);
 
-	readmap->typemap[tz * gs->hmapx + tx] = std::max(0, std::min(ntt, (CMapInfo::NUM_TERRAIN_TYPES - 1)));
+	readmap->GetTypeMapSynced()[tz * gs->hmapx + tx] = std::max(0, std::min(ntt, (CMapInfo::NUM_TERRAIN_TYPES - 1)));
 	pathManager->TerrainChange(hx, hz,  hx + 1, hz + 1);
 
 	lua_pushnumber(L, ott);
@@ -3185,10 +3212,12 @@ int LuaSyncedCtrl::SetTerrainTypeData(lua_State* L)
 	}
 	*/
 
+	const unsigned char* typeMap = readmap->GetTypeMapSynced();
+
 	// update all map-squares set to this terrain-type (slow)
 	for (int tx = 0; tx < gs->hmapx; tx++) {
 		for (int tz = 0; tz < gs->hmapy; tz++) {
-			if (readmap->typemap[tz * gs->hmapx + tx] == tti) {
+			if (typeMap[tz * gs->hmapx + tx] == tti) {
 				pathManager->TerrainChange((tx << 1), (tz << 1),  (tx << 1) + 1, (tz << 1) + 1);
 			}
 		}

@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include <set>
 #include <string>
@@ -23,12 +22,9 @@
 #include "Sim/Projectiles/Projectile.h"
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
-#include "FileSystem/SimpleParser.h"
-#include "LogOutput.h"
-#include "Util.h"
+#include "System/FileSystem/SimpleParser.h"
+#include "System/Util.h"
 #include "Sim/Misc/GlobalSynced.h"
-
-using namespace std;
 
 
 static ParamMap paramMap;
@@ -316,10 +312,11 @@ static int VisualsTable(lua_State* L, const void* data)
 }
 
 
-static int NoFeatureCollide(lua_State* L, const void* data)
+
+static int NoEnemyCollide(lua_State* L, const void* data)
 {
 	const int bits = *((const int*) data);
-	lua_pushboolean(L, (bits & Collision::NOFEATURES));
+	lua_pushboolean(L, (bits & Collision::NOENEMIES));
 	return 1;
 }
 
@@ -330,12 +327,27 @@ static int NoFriendlyCollide(lua_State* L, const void* data)
 	return 1;
 }
 
+static int NoFeatureCollide(lua_State* L, const void* data)
+{
+	const int bits = *((const int*) data);
+	lua_pushboolean(L, (bits & Collision::NOFEATURES));
+	return 1;
+}
+
 static int NoNeutralCollide(lua_State* L, const void* data)
 {
 	const int bits = *((const int*) data);
 	lua_pushboolean(L, (bits & Collision::NONEUTRALS));
 	return 1;
 }
+
+static int NoGroundCollide(lua_State* L, const void* data)
+{
+	const int bits = *((const int*) data);
+	lua_pushboolean(L, (bits & Collision::NOGROUND));
+	return 1;
+}
+
 
 
 static inline int BuildCategorySet(lua_State* L, const vector<string>& cats)
@@ -399,7 +411,14 @@ static int GuiSoundSetTable(lua_State* L, const void* data)
 		}
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", soundCount);
+	return 1;
+}
+
+
+static int DeprecatedMaxVelocity(lua_State* L, const void* data)
+{
+	const float projspeed = *((const float*) data);
+	lua_pushnumber(L, projspeed * GAME_SPEED);
 	return 1;
 }
 
@@ -422,10 +441,14 @@ static bool InitParamMap()
 	ADD_FUNCTION("fireSound", wd.firesound, GuiSoundSetTable);
 
 	ADD_FUNCTION("customParams",         wd.customParams,   CustomParamsTable);
-	ADD_FUNCTION("noFeatureCollide",     wd.collisionFlags, NoFeatureCollide);
+	ADD_FUNCTION("noEnemyCollide",       wd.collisionFlags, NoEnemyCollide);
 	ADD_FUNCTION("noFriendlyCollide",    wd.collisionFlags, NoFriendlyCollide);
+	ADD_FUNCTION("noFeatureCollide",     wd.collisionFlags, NoFeatureCollide);
 	ADD_FUNCTION("noNeutralCollide",     wd.collisionFlags, NoNeutralCollide);
+	ADD_FUNCTION("noGroundCollide",      wd.collisionFlags, NoGroundCollide);
 	ADD_FUNCTION("onlyTargetCategories", wd.onlyTargetCategory, CategorySetFromBits);
+
+	ADD_FUNCTION("maxVelocity", wd.projectilespeed, DeprecatedMaxVelocity); // NOTE: deprecated (needs to be linked via _FUNCTION, else it would be writeable)
 
 	ADD_INT("id", wd.id);
 
@@ -477,7 +500,6 @@ static bool InitParamMap()
 
 	ADD_FLOAT("metalCost",  wd.metalcost);
 	ADD_FLOAT("energyCost", wd.energycost);
-	ADD_FLOAT("supplyCost", wd.supplycost);
 
 	ADD_BOOL("turret", wd.turret);
 	ADD_BOOL("onlyForward", wd.onlyForward);
@@ -509,7 +531,6 @@ static bool InitParamMap()
 	ADD_FLOAT("startvelocity", wd.startvelocity);
 	ADD_FLOAT("weaponAcceleration", wd.weaponacceleration);
 	ADD_FLOAT("turnRate", wd.turnrate);
-	ADD_FLOAT("maxVelocity", wd.maxvelocity);
 
 	ADD_FLOAT("projectilespeed", wd.projectilespeed);
 	ADD_FLOAT("explosionSpeed", wd.explosionSpeed);

@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef __GAME_H__
-#define __GAME_H__
+#ifndef _GAME_H
+#define _GAME_H
 
 #include <time.h>
 #include <string>
@@ -9,11 +9,10 @@
 #include <set>
 
 #include "GameController.h"
-#include "creg/creg_cond.h"
+#include "System/creg/creg_cond.h"
 
-class CBaseWater;
+class IWater;
 class CConsoleHistory;
-class CWordCompletion;
 class CKeySet;
 class CInfoConsole;
 class LuaParser;
@@ -24,6 +23,7 @@ class ISyncedActionExecutor;
 class IUnsyncedActionExecutor;
 class ChatMessage;
 class SkirmishAIData;
+class CWorldDrawer;
 
 
 class CGame : public CGameController
@@ -125,17 +125,15 @@ public:
 	unsigned char gameID[16];
 
 	CInfoConsole* infoConsole;
-
-	void MakeMemDump();
-
 	CConsoleHistory* consoleHistory;
-	CWordCompletion* wordCompletion;
 
 	void SetHotBinding(const std::string& action) { hotBinding = action; }
 
 public:
 	/// Save the game state to file.
 	void SaveGame(const std::string& filename, bool overwrite);
+	void DumpState(int newMinFrameNum, int newMaxFrameNum, int newFramePeriod);
+
 	/// Re-load the game.
 	void ReloadGame();
 	/// Send a message to other players (allows prefixed messages with e.g. "a:...")
@@ -192,7 +190,6 @@ public:
 
 	void ClientReadNet();
 	void UpdateUI(bool cam);
-	bool DrawWorld();
 
 	void SimFrame();
 	void StartPlaying();
@@ -222,10 +219,13 @@ public:
 
 	/// for reloading the savefile
 	ILoadSaveHandler* saveFile;
+
+private:
+	CWorldDrawer* worldDrawer;
 };
 
 
 extern CGame* game;
 
 
-#endif // __GAME_H__
+#endif // _GAME_H

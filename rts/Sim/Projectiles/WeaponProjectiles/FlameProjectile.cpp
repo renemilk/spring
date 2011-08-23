@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "FlameProjectile.h"
 #include "Game/Camera.h"
@@ -56,10 +55,6 @@ CFlameProjectile::~CFlameProjectile()
 
 void CFlameProjectile::Collision()
 {
-	if (ground->GetHeightReal(pos.x, pos.z) < pos.y && weaponDef->waterweapon) {
-		// prevent waterweapons from colliding with water
-		return;
-	}
 	const float3 norm = ground->GetNormal(pos.x, pos.z);
 	const float ns = speed.dot(norm);
 	speed -= (norm * ns);

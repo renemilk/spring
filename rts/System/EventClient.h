@@ -7,20 +7,30 @@
 #include <vector>
 #include <map>
 
-#include "float3.h"
+#ifdef __APPLE__
+// defined in X11/X.h
+#undef KeyPress
+#undef KeyRelease
+#endif
 
 using std::string;
 using std::vector;
 using std::map;
 
+class float3;
 class CUnit;
 class CWeapon;
 class CFeature;
 class CProjectile;
 struct Command;
-class CLogSubsystem;
-typedef void* zipFile;
-class CArchiveBase;
+class IArchive;
+struct SRectangle;
+
+#ifndef zipFile
+	// might be defined through zip.h already
+	typedef void* zipFile;
+#endif
+
 
 class CEventClient
 {
@@ -36,9 +46,11 @@ class CEventClient
 		inline int                GetOrder()  const { return order;  }
 		inline bool               GetSynced() const { return synced_; }
 
-		// used by the eventHandler to register
-		// call-ins when an EventClient is being added
-		virtual bool WantsEvent(const std::string& eventName) { return false; }
+		/**
+		 * Used by the eventHandler to register
+		 * call-ins when an EventClient is being added.
+		 */
+		virtual bool WantsEvent(const std::string& eventName) = 0;
 
 		// used by the eventHandler to route certain event types
 		virtual int  GetReadAllyTeam() const { return NoAccessTeam; }
@@ -54,17 +66,21 @@ class CEventClient
 
 	protected:
 		CEventClient(const std::string& name, int order, bool synced);
-		virtual ~CEventClient() {}
+		virtual ~CEventClient();
 
 	public:
-		// Synced events
-		virtual void Load(CArchiveBase* archive) {}
+		/**
+		 * @name Synced_events
+		 * @{
+		 */
+		virtual void Load(IArchive* archive) {}
 
 		virtual void GamePreload() {}
 		virtual void GameStart() {}
-		virtual void GameOver(std::vector<unsigned char> winningAllyTeams) {}
+		virtual void GameOver(const std::vector<unsigned char>& winningAllyTeams) {}
 		virtual void GamePaused(int playerID, bool paused) {}
 		virtual void GameFrame(int gameFrame) {}
+
 		virtual void TeamDied(int teamID) {}
 		virtual void TeamChanged(int teamID) {}
 		virtual void PlayerChanged(int playerID) {}
@@ -132,11 +148,16 @@ class CEventClient
 		                              const CWeapon* weapon, int oldCount) {}
 
 		virtual bool Explosion(int weaponID, const float3& pos, const CUnit* owner) { return false; }
+		/// @}
 
-		// Unsynced events
+		/**
+		 * @name Unsynced_events
+		 * @{
+		 */
 		virtual void Save(zipFile archive);
 
 		virtual void Update();
+		virtual void UnsyncedHeightMapUpdate(const SRectangle& rect);
 
 		virtual bool KeyPress(unsigned short key, bool isRepeat);
 		virtual bool KeyRelease(unsigned short key);
@@ -152,7 +173,9 @@ class CEventClient
 
 		virtual bool CommandNotify(const Command& cmd);
 
-		virtual bool AddConsoleLine(const std::string& msg, const CLogSubsystem& subsystem);
+		virtual bool AddConsoleLine(const std::string& msg, const std::string& section, int level);
+
+		virtual void LastMessagePosition(const float3& pos);
 
 		virtual bool GroupChanged(int groupID);
 
@@ -179,7 +202,11 @@ class CEventClient
 		virtual void DrawScreenEffects();
 		virtual void DrawScreen();
 		virtual void DrawInMiniMap();
+
+		virtual void GameProgress(int gameFrame) {}
+		/// @}
 };
 
 
 #endif /* EVENT_CLIENT_H */
+

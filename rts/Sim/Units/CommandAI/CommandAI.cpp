@@ -1,21 +1,15 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "CommandAI.h"
 #include "FactoryCAI.h"
-#include "LineDrawer.h"
 #include "ExternalAI/EngineOutHandler.h"
 #include "ExternalAI/SkirmishAIHandler.h"
-#include "Sim/Units/Groups/Group.h"
 #include "Game/GameHelper.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/SelectedUnits.h"
 #include "Game/WaitCommandsAI.h"
-#include "Game/UI/CommandColors.h"
-#include "Game/UI/CursorIcons.h"
-#include "Rendering/GL/myGL.h"
-#include "Rendering/GL/glExtra.h"
 #include "Lua/LuaRules.h"
 #include "Map/Ground.h"
 #include "Map/MapDamage.h"
@@ -28,20 +22,19 @@
 #include "Sim/Units/UnitDefHandler.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitHandler.h"
+#include "Sim/Units/Groups/Group.h"
 #include "Sim/Units/UnitTypes/Factory.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
 #include "Sim/Weapons/Weapon.h"
-#include "EventHandler.h"
-#include "LoadSave/LoadSaveInterface.h"
-#include "LogOutput.h"
-#include "myMath.h"
-#include "creg/STL_Set.h"
-#include "creg/STL_Deque.h"
+#include "System/EventHandler.h"
+#include "System/LoadSave/LoadSaveInterface.h"
+#include "System/myMath.h"
+#include "System/Util.h"
+#include "System/creg/STL_Set.h"
+#include "System/creg/STL_Deque.h"
 #include <assert.h>
-#include "GlobalUnsynced.h"
-#include "Util.h"
 
-const int TARGET_LOST_TIMER =120;	// in calls to SlowUpdate() (approx. once every second)
+static const int TARGET_LOST_TIMER = 120; // in calls to SlowUpdate() (approx. twice every second)
 
 CR_BIND(CCommandQueue, );
 CR_REG_METADATA(CCommandQueue, (
@@ -116,23 +109,23 @@ CCommandAI::CCommandAI(CUnit* owner):
 	c.tooltip = "Stop: Cancel the units current actions";
 	possibleCommands.push_back(c);
 
-	if (isAttackCapable()) {
+	if (IsAttackCapable()) {
 		c.id = CMD_ATTACK;
 		c.action = "attack";
 		c.type = CMDTYPE_ICON_UNIT_OR_MAP;
 		c.name = "Attack";
 		c.mouseicon = c.name;
-		c.tooltip = "Attack: Attacks an unit or a position on the ground";
+		c.tooltip = "Attack: Attacks a unit or a position on the ground";
 		possibleCommands.push_back(c);
 	}
 
-	if (owner->unitDef->canDGun) {
-		c.id = CMD_DGUN;
-		c.action = "dgun";
+	if (owner->unitDef->canManualFire) {
+		c.id = CMD_MANUALFIRE;
+		c.action = "manualfire";
 		c.type = CMDTYPE_ICON_MAP;
-		c.name = "DGun";
+		c.name = "ManualFire";
 		c.mouseicon = c.name;
-		c.tooltip = "DGun: Attacks using the units special weapon";
+		c.tooltip = "ManualFire: Attacks with manually-fired weapon";
 		possibleCommands.push_back(c);
 	}
 
@@ -332,7 +325,7 @@ vector<CommandDescription>& CCommandAI::GetPossibleCommands()
 }
 
 
-bool CCommandAI::isAttackCapable() const
+bool CCommandAI::IsAttackCapable() const
 {
 	const UnitDef* ud = owner->unitDef;
 	const bool b = (!ud->weapons.empty() || ud->canKamikaze || (ud->IsFactoryUnit()));
@@ -371,7 +364,7 @@ static inline bool IsCommandInMap(const Command& c)
 
 bool CCommandAI::AllowedCommand(const Command& c, bool fromSynced)
 {
-	// check if the command is in the map first
+	// TODO check if the command is in the map first, for more commands
 	switch (c.GetID()) {
 		case CMD_MOVE:
 		case CMD_ATTACK:
@@ -382,7 +375,7 @@ bool CCommandAI::AllowedCommand(const Command& c, bool fromSynced)
 		case CMD_PATROL:
 		case CMD_RESTORE:
 		case CMD_FIGHT:
-		case CMD_DGUN:
+		case CMD_MANUALFIRE:
 		case CMD_UNLOAD_UNIT:
 		case CMD_UNLOAD_UNITS: {
 			if (!IsCommandInMap(c)) { return false; }
@@ -402,12 +395,12 @@ bool CCommandAI::AllowedCommand(const Command& c, bool fromSynced)
 	const int& cmd_id = c.GetID();
 	
 	switch (cmd_id) {
-		case CMD_DGUN:
-			if (!ud->canDGun)
+		case CMD_MANUALFIRE:
+			if (!ud->canManualFire)
 				return false;
 
 		case CMD_ATTACK: {
-			if (!isAttackCapable())
+			if (!IsAttackCapable())
 				return false;
 
 			if (c.params.size() == 1) {
@@ -699,8 +692,8 @@ void CCommandAI::GiveAllowedCommand(const Command& c, bool fromSynced)
 	if (!(c.options & SHIFT_KEY)) {
 		if (!commandQue.empty()) {
 			const int& cmd_id = commandQue.front().GetID();
-			if ((cmd_id == CMD_DGUN)      ||
-			    (cmd_id == CMD_ATTACK)    ||
+			if ((cmd_id == CMD_MANUALFIRE) ||
+			    (cmd_id == CMD_ATTACK)     ||
 			    (cmd_id == CMD_AREA_ATTACK)) {
 				owner->AttackUnit(0,true);
 			}
@@ -926,8 +919,6 @@ void CCommandAI::ExecuteInsert(const Command& c, bool fromSynced)
 	if (!owner->stunned) {
 		SlowUpdate();
 	}
-
-	return;
 }
 
 
@@ -1018,22 +1009,13 @@ void CCommandAI::ExecuteRemove(const Command& c)
 }
 
 
-/**
-* @brief Determins if c will cancel a queued command
-* @return true if c will cancel a queued command
-**/
-bool CCommandAI::WillCancelQueued(Command &c)
+bool CCommandAI::WillCancelQueued(const Command& c)
 {
-	return (this->GetCancelQueued(c, commandQue) != this->commandQue.end());
+	return (GetCancelQueued(c, commandQue) != commandQue.end());
 }
 
 
-/**
-* @brief Finds the queued command that would be canceled by the Command c
-* @return An iterator located at the command, or commandQue.end() if no such queued command exsists
-**/
-CCommandQueue::iterator CCommandAI::GetCancelQueued(const Command &c,
-                                                          CCommandQueue& q)
+CCommandQueue::iterator CCommandAI::GetCancelQueued(const Command& c, CCommandQueue& q)
 {
 	CCommandQueue::iterator ci = q.end();
 
@@ -1047,7 +1029,7 @@ CCommandQueue::iterator CCommandAI::GetCancelQueued(const Command &c,
 				|| (cmd2_id == CMD_FIGHT && cmd_id == CMD_ATTACK && c2.params.size() == 1))
 				&& (c2.params.size() == c.params.size())) {
 			if (c.params.size() == 1) {
-			  // assume the param is a unit of feature id
+				// assume the param is a unit-ID or feature-ID
 				if ((c2.params[0] == c.params[0]) &&
 				    (cmd2_id != CMD_SET_WANTED_MAX_SPEED)) {
 					return ci;
@@ -1077,8 +1059,7 @@ CCommandQueue::iterator CCommandAI::GetCancelQueued(const Command &c,
 }
 
 
-int CCommandAI::CancelCommands(const Command &c, CCommandQueue& q,
-                               bool& first)
+int CCommandAI::CancelCommands(const Command &c, CCommandQueue& q, bool& first)
 {
 	first = false;
 	int cancelCount = 0;
@@ -1120,18 +1101,13 @@ int CCommandAI::CancelCommands(const Command &c, CCommandQueue& q,
 }
 
 
-/**
-* @brief Returns commands that overlap c, but will not be canceled by c
-* @return a vector containing commands that overlap c
-*/
-std::vector<Command> CCommandAI::GetOverlapQueued(const Command &c)
+std::vector<Command> CCommandAI::GetOverlapQueued(const Command& c)
 {
 	return GetOverlapQueued(c, commandQue);
 }
 
 
-std::vector<Command> CCommandAI::GetOverlapQueued(const Command &c,
-                                                  CCommandQueue& q)
+std::vector<Command> CCommandAI::GetOverlapQueued(const Command& c, CCommandQueue& q)
 {
 	CCommandQueue::iterator ci = q.end();
 	std::vector<Command> v;
@@ -1191,10 +1167,8 @@ int CCommandAI::UpdateTargetLostTimer(int unitID)
 	return targetLostTimer;
 }
 
-/**
-* @brief Causes this CommandAI to execute the attack order c
-*/
-void CCommandAI::ExecuteAttack(Command &c)
+
+void CCommandAI::ExecuteAttack(Command& c)
 {
 	assert(owner->unitDef->canAttack);
 
@@ -1219,7 +1193,7 @@ void CCommandAI::ExecuteAttack(Command &c)
 			CUnit* targetUnit = uh->GetUnit(c.params[0]);
 
 			if (targetUnit != NULL && targetUnit != owner) {
-				owner->AttackUnit(targetUnit, c.GetID() == CMD_DGUN);
+				owner->AttackUnit(targetUnit, c.GetID() == CMD_MANUALFIRE);
 
 				if (orderTarget)
 					DeleteDeathDependence(orderTarget);
@@ -1233,15 +1207,13 @@ void CCommandAI::ExecuteAttack(Command &c)
 			}
 		} else {
 			float3 pos(c.params[0], c.params[1], c.params[2]);
-			owner->AttackGround(pos, c.GetID() == CMD_DGUN);
+			owner->AttackGround(pos, c.GetID() == CMD_MANUALFIRE);
 			inCommand = true;
 		}
 	}
 }
 
-/**
-* @brief executes the stop command c
-*/
+
 void CCommandAI::ExecuteStop(Command &c)
 {
 	owner->AttackUnit(0,true);
@@ -1252,14 +1224,6 @@ void CCommandAI::ExecuteStop(Command &c)
 	FinishCommand();
 }
 
-/**
-* @brief executes the DGun command c
-*/
-void CCommandAI::ExecuteDGun(Command &c)
-{
-	ExecuteAttack(c);
-	return;
-}
 
 void CCommandAI::SlowUpdate()
 {
@@ -1292,8 +1256,8 @@ void CCommandAI::SlowUpdate()
 			ExecuteAttack(c);
 			return;
 		}
-		case CMD_DGUN: {
-			ExecuteDGun(c);
+		case CMD_MANUALFIRE: {
+			ExecuteAttack(c);
 			return;
 		}
 	}
@@ -1315,7 +1279,7 @@ int CCommandAI::GetDefaultCmd(const CUnit* pointed, const CFeature* feature)
 {
 	if (pointed) {
 		if (!teamHandler->Ally(gu->myAllyTeam, pointed->allyteam)) {
-			if (isAttackCapable()) {
+			if (IsAttackCapable()) {
 				return CMD_ATTACK;
 			}
 		}
@@ -1323,114 +1287,17 @@ int CCommandAI::GetDefaultCmd(const CUnit* pointed, const CFeature* feature)
 	return CMD_STOP;
 }
 
-void CCommandAI::DependentDied(CObject *o)
+void CCommandAI::DependentDied(CObject* o)
 {
-	if(o==orderTarget){
-		targetDied=true;
-		orderTarget=0;
+	if (o == orderTarget) {
+		targetDied = true;
+		orderTarget = NULL;
 	}
 }
 
 
-bool CCommandAI::isTrackable(const CUnit* unit) const
-{
-	return ((unit->losStatus[owner->allyteam] & (LOS_INLOS | LOS_INRADAR)) != 0) ||
-	       (unit->unitDef->speed <= 0.0f);
-}
 
-
-void CCommandAI::DrawWaitIcon(const Command& cmd) const
-{
-	waitCommandsAI.AddIcon(cmd, lineDrawer.GetLastPos());
-}
-
-
-void CCommandAI::DrawCommands(void)
-{
-	lineDrawer.StartPath(owner->drawMidPos, cmdColors.start);
-
-	if (owner->selfDCountdown != 0) {
-		lineDrawer.DrawIconAtLastPos(CMD_SELFD);
-	}
-
-	CCommandQueue::iterator ci;
-	for (ci = commandQue.begin(); ci != commandQue.end(); ++ci) {
-		switch (ci->GetID()) {
-			case CMD_ATTACK:
-			case CMD_DGUN: {
-				if (ci->params.size() == 1) {
-					const CUnit* unit = uh->GetUnit(ci->params[0]);
-
-					if ((unit != NULL) && isTrackable(unit)) {
-						const float3 endPos =
-							helper->GetUnitErrorPos(unit, owner->allyteam);
-						lineDrawer.DrawLineAndIcon(ci->GetID(), endPos, cmdColors.attack);
-					}
-				} else {
-					const float3 endPos(ci->params[0],ci->params[1]+3,ci->params[2]);
-					lineDrawer.DrawLineAndIcon(ci->GetID(), endPos, cmdColors.attack);
-				}
-				break;
-			}
-			case CMD_WAIT:{
-				DrawWaitIcon(*ci);
-				break;
-			}
-			case CMD_SELFD:{
-				lineDrawer.DrawIconAtLastPos(ci->GetID());
-				break;
-			}
-			default:{
-				DrawDefaultCommand(*ci);
-				break;
-			}
-		}
-	}
-
-	lineDrawer.FinishPath();
-}
-
-
-void CCommandAI::DrawDefaultCommand(const Command& c) const
-{
-	// TODO add Lua callin perhaps, for more elaborate needs?
-	const CCommandColors::DrawData* dd = cmdColors.GetCustomCmdData(c.GetID());
-	if (dd == NULL) {
-		return;
-	}
-	const int paramsCount = c.params.size();
-
-	if (paramsCount == 1) {
-		const CUnit* unit = uh->GetUnit(c.params[0]);
-
-		if ((unit != NULL) && isTrackable(unit)) {
-			const float3 endPos = helper->GetUnitErrorPos(unit, owner->allyteam);
-			lineDrawer.DrawLineAndIcon(dd->cmdIconID, endPos, dd->color);
-		}
-
-		return;
-	}
-
-	if (paramsCount < 3) {
-		return;
-	}
-
-	const float3 endPos(c.params[0], c.params[1] + 3.0f, c.params[2]);
-
-	if (!dd->showArea || (paramsCount < 4)) {
-		lineDrawer.DrawLineAndIcon(dd->cmdIconID, endPos, dd->color);
-	}
-	else {
-		const float radius = c.params[3];
-		lineDrawer.DrawLineAndIcon(dd->cmdIconID, endPos, dd->color);
-		lineDrawer.Break(endPos, dd->color);
-		glSurfaceCircle(endPos, radius, 20);
-		lineDrawer.RestartWithColor(dd->color);
-	}
-}
-
-
-void CCommandAI::FinishCommand(void)
+void CCommandAI::FinishCommand()
 {
 	assert(!commandQue.empty());
 	const Command cmd = commandQue.front();
@@ -1487,7 +1354,7 @@ void CCommandAI::StockpileChanged(CWeapon* weapon)
 	UpdateStockpileIcon();
 }
 
-void CCommandAI::UpdateStockpileIcon(void)
+void CCommandAI::UpdateStockpileIcon()
 {
 	vector<CommandDescription>::iterator pci;
 	for(pci=possibleCommands.begin();pci!=possibleCommands.end();++pci){
@@ -1508,36 +1375,36 @@ void CCommandAI::WeaponFired(CWeapon* weapon)
 	if (commandQue.empty()) { return; }
 	if (!weapon->weaponDef->manualfire) { return; }
 
-	if (commandQue.front().GetID() == CMD_ATTACK || commandQue.front().GetID() == CMD_DGUN) {
+	if (commandQue.front().GetID() == CMD_ATTACK || commandQue.front().GetID() == CMD_MANUALFIRE) {
 		owner->AttackUnit(0, true);
 		eoh->WeaponFired(*owner, *(weapon->weaponDef));
 		FinishCommand();
 	}
 }
 
-void CCommandAI::BuggerOff(float3 pos, float radius)
+void CCommandAI::BuggerOff(const float3& pos, float radius)
 {
 }
 
 void CCommandAI::LoadSave(CLoadSaveInterface* file, bool loading)
 {
-	int queSize=commandQue.size();
+	int queSize = commandQue.size();
 	file->lsInt(queSize);
-	for(int a=0;a<queSize;++a){
-		if(loading){
+	for (int a = 0; a < queSize; ++a) {
+		if (loading) {
 			commandQue.push_back(Command());
 		}
-		Command& c=commandQue[a];
+		Command& c = commandQue[a];
 		int cmd_id = c.GetID();
 		file->lsInt(cmd_id);
 		file->lsUChar(c.options);
 		file->lsInt(c.timeOut);
 
-		int paramSize=c.params.size();
+		int paramSize = c.params.size();
 		file->lsInt(paramSize);
-		for(int b=0;b<paramSize;++b){
-			if(loading){
-				c.params.push_back(0);
+		for (int b = 0; b < paramSize; ++b) {
+			if (loading) {
+				c.params.push_back(0.0f);
 			}
 			file->lsFloat(c.params[b]);
 		}
@@ -1545,11 +1412,6 @@ void CCommandAI::LoadSave(CLoadSaveInterface* file, bool loading)
 }
 
 
-/**
- * @brief gets the command that keeps the unit close to the path
- * @return a Fight Command with 6 arguments, the first three being where to return to (the current position of the
- *	unit), and the second being the location of the origional command.
- **/
 void CCommandAI::PushOrUpdateReturnFight(const float3& cmdPos1, const float3& cmdPos2)
 {
 	float3 pos = ClosestPointOnLine(cmdPos1, cmdPos2, owner->pos);
@@ -1581,7 +1443,7 @@ bool CCommandAI::HasMoreMoveCommands()
 			// in that they can require a unit to move, so return true when we
 			// have one
 			if (id == CMD_FIGHT || id == CMD_AREA_ATTACK || id == CMD_ATTACK || id == CMD_CAPTURE
-			 || id == CMD_DGUN || id == CMD_GUARD || id == CMD_LOAD_UNITS || id == CMD_MOVE
+			 || id == CMD_MANUALFIRE || id == CMD_GUARD || id == CMD_LOAD_UNITS || id == CMD_MOVE
 			 || id == CMD_PATROL || id == CMD_RECLAIM || id == CMD_REPAIR || id == CMD_RESTORE
 			 || id == CMD_RESURRECT || id == CMD_UNLOAD_UNIT || id == CMD_UNLOAD_UNITS || id < 0)
 			{
@@ -1626,7 +1488,7 @@ bool CCommandAI::CanChangeFireState() {
 	return (ud->canFireControl && b);
 }
 
-/// remove attack commands targeted at our new ally
+
 void CCommandAI::StopAttackingAllyTeam(int ally)
 {
 	std::vector<int> todel;

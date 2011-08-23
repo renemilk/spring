@@ -24,9 +24,10 @@ public:
 	CStarburstProjectile(const float3& pos, const float3& speed, CUnit* owner,
 			float3 targetPos, float areaOfEffect, float maxSpeed,float tracking,
 			int uptime, CUnit* target, const WeaponDef* weaponDef,
-			CWeaponProjectile* interceptTarget, float maxdistance,
+			CWeaponProjectile* interceptTarget, float maxRange,
 			float3 aimError);
 	~CStarburstProjectile();
+	virtual void Detach();
 	void Collision(CUnit* unit);
 	void Collision();
 	void Update();
@@ -53,7 +54,6 @@ private:
 	int numParts;
 	bool doturn;
 	CSmokeTrailProjectile* curCallback;
-	int* numCallback;
 	int missileAge;
 	float distanceToTravel;
 

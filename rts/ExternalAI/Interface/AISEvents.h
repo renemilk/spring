@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef _AISEVENTS_H
-#define _AISEVENTS_H
+#ifndef AI_S_EVENTS_H
+#define AI_S_EVENTS_H
 
 // IMPORTANT NOTE: external systems parse this file,
 // so DO NOT CHANGE the style and format it uses without
@@ -12,9 +12,10 @@ extern "C" {
 #endif
 
 /**
-  * aliases to keep event-names (though not
-  * ID's) consistent, without breaking ABI
-  */
+ * aliases to keep event-names (though not
+ * ID's) consistent, without breaking ABI
+ * FIXME remove this once Skirmish AI ABI would break anyway
+ */
 #define EVENT_CHAT_MESSAGE  EVENT_MESSAGE
 #define SChatMessageEvent   SMessageEvent
 
@@ -37,6 +38,7 @@ enum EventTopic {
 	EVENT_INIT                         =  1,
 	EVENT_RELEASE                      =  2,
 	EVENT_UPDATE                       =  3,
+	EVENT_CHAT_MESSAGE                 =  4,
 	EVENT_UNIT_CREATED                 =  5,
 	EVENT_UNIT_FINISHED                =  6,
 	EVENT_UNIT_IDLE                    =  7,
@@ -59,7 +61,6 @@ enum EventTopic {
 	EVENT_SAVE                         = 24,
 	EVENT_ENEMY_CREATED                = 25,
 	EVENT_ENEMY_FINISHED               = 26,
-	EVENT_CHAT_MESSAGE                 =  4,
 	EVENT_LUA_MESSAGE                  = 27,
 };
 const int NUM_EVENTS = 28;
@@ -406,4 +407,4 @@ struct SEnemyFinishedEvent {
 } // extern "C"
 #endif
 
-#endif // _AISEVENTS_H
+#endif // AI_S_EVENTS_H

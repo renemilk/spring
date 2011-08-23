@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LightningCannon.h"
 #include "WeaponDefHandler.h"
@@ -67,9 +66,9 @@ bool CLightningCannon::TryTarget(const float3& pos, bool userTarget, CUnit* unit
 
 	dir /= length;
 
-	float g = ground->LineGroundCol(weaponMuzzlePos, pos);
-	if (g > 0 && g < length * 0.9f)
+	if (!HaveFreeLineOfFire(weaponMuzzlePos, dir, length, unit)) {
 		return false;
+	}
 
 	if (avoidFeature && TraceRay::LineFeatureCol(weaponMuzzlePos, dir, length)) {
 		return false;
@@ -120,9 +119,9 @@ void CLightningCannon::FireImpl()
 	}
 
 	// Dynamic Damage
-	DamageArray dynDamages;
+	DamageArray damageArray;
 	if (weaponDef->dynDamageExp > 0) {
-		dynDamages = weaponDefHandler->DynamicDamages(
+		damageArray = weaponDefHandler->DynamicDamages(
 			weaponDef->damages,
 			weaponMuzzlePos,
 			targetPos,
@@ -133,27 +132,28 @@ void CLightningCannon::FireImpl()
 			weaponDef->dynDamageMin,
 			weaponDef->dynDamageInverted
 		);
+	} else {
+		damageArray = weaponDef->damages;
 	}
 
-	helper->Explosion(
+	CGameHelper::ExplosionParams params = {
 		weaponMuzzlePos + dir * r,
-		weaponDef->dynDamageExp > 0?
-			dynDamages:
-			weaponDef->damages,
+		dir,
+		damageArray,
+		weaponDef,
+		owner,
+		u,                                                // hitUnit
+		f,                                                // hitFeature
 		areaOfEffect,
 		weaponDef->edgeEffectiveness,
 		weaponDef->explosionSpeed,
-		owner,
-		false,
-		0.5f,
-		weaponDef->noExplode || weaponDef->noSelfDamage, /*true*/
-		weaponDef->impactOnly,                           /*false*/
-		weaponDef->explosionGenerator,
-		u,
-		dir,
-		weaponDef->id,
-		f
-	);
+		0.5f,                                             // gfxMod
+		weaponDef->impactOnly,
+		weaponDef->noExplode || weaponDef->noSelfDamage,  // ignoreOwner
+		false                                             // damageGround
+	};
+
+	helper->Explosion(params);
 
 	new CLightningProjectile(
 		weaponMuzzlePos,

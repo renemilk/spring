@@ -6,7 +6,6 @@
 #include <deque>
 #include <string>
 
-#include "GlobalUnsynced.h"
 #include "Rendering/GlobalRendering.h"
 
 class CInputReceiver
@@ -36,7 +35,7 @@ public:
 
 	struct ContainerBox {
 		ContainerBox();
-		ContainerBox operator+(ContainerBox other);
+		ContainerBox operator+(ContainerBox other) const;
 		float x1;
 		float y1;
 		float x2;

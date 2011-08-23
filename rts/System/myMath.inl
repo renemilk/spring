@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 //                  F(N=2) = H(-32768 / 32767)
-// 
+//
 //                         ^
 //                         |
 //                         |
@@ -9,7 +9,7 @@
 //                         |
 //                         |
 //                         v
-// 
+//
 //                  F(S=0) = H(0)
 inline short int GetHeadingFromFacing(int facing)
 {
@@ -98,11 +98,7 @@ inline shortint2 GetHAndPFromVector(const float3& vec)
 	// If h goes beyond SHORTINT_MAXVALUE, the following
 	// conversion to a short int crashes.
 	// this change destroys the whole meaning with using short ints....
-  #if defined BUILDING_AI
-	int iy = (int) (std::asin(vec.y) * (SHORTINT_MAXVALUE * INVPI));
-  #else
-	int iy = (int) (streflop::asin(vec.y) * (SHORTINT_MAXVALUE * INVPI));
-  #endif
+	int iy = (int) (math::asin(vec.y) * (SHORTINT_MAXVALUE * INVPI));
 	iy %= SHORTINT_MAXVALUE;
 	ret.y = (short int) iy;
 	ret.x = GetHeadingFromVector(vec.x, vec.z);
@@ -114,11 +110,7 @@ inline float2 GetHAndPFromVectorF(const float3& vec)
 {
 	float2 ret;
 
-  #if defined BUILDING_AI
-	ret.y = std::asin(vec.y);
-  #else
-	ret.y = streflop::asin(vec.y);
-  #endif
+	ret.y = math::asin(vec.y);
 	ret.x = GetHeadingFromVectorF(vec.x, vec.z);
 	return ret;
 }
@@ -148,15 +140,10 @@ inline int Round(const float f)
 	return math::floor(f + 0.5f);
 }
 
-inline float Clamp(const float& v, const float& min, const float& max)
-{
-	return std::min(max, std::max(min, v));
-}
-
 template<class T>
 inline T Clamp(const T& v, const T& min, const T& max)
 {
-	return v < min ? min : (v > max ? max : v);
+	return std::min(max, std::max(min, v));
 }
 
 inline float ClampRad(float f)

@@ -1,16 +1,15 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "DirtProjectile.h"
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CDirtProjectile, CProjectile, );
 
@@ -32,7 +31,7 @@ CR_REG_METADATA(CDirtProjectile,
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-CDirtProjectile::CDirtProjectile(const float3 pos, const float3 speed, const float ttl, const float size, const float expansion, float slowdown, CUnit* owner, const float3& color):
+CDirtProjectile::CDirtProjectile(const float3& pos, const float3& speed, const float ttl, const float size, const float expansion, float slowdown, CUnit* owner, const float3& color):
 	CProjectile(pos, speed, owner, false, false, false),
 	alpha(255),
 	size(size),
@@ -68,7 +67,7 @@ void CDirtProjectile::Update()
 	alpha -= alphaFalloff;
 	size += sizeExpansion;
 
-	if (ground->GetApproximateHeight(pos.x, pos.z) - 40 > pos.y) {
+	if (ground->GetApproximateHeight(pos.x, pos.z, false) - 40 > pos.y) {
 		deleteMe = true;
 	}
 	if (alpha <= 0) {

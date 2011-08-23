@@ -1,26 +1,30 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
+#include "System/Platform/Win/win32.h"
 #include "Joystick.h"
 
 #include <SDL.h>
 
 #include "InputHandler.h"
-#include "ConfigHandler.h"
-#include "LogOutput.h"
-#include "EventHandler.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
+#include "System/EventHandler.h"
+
+CONFIG(bool, JoystickEnabled).defaultValue(true);
+CONFIG(int, JoystickUse).defaultValue(0);
 
 Joystick* stick = NULL;
 
 void InitJoystick()
 {
-	const bool useJoystick = configHandler->Get("JoystickEnabled", true);
+	const bool useJoystick = configHandler->GetBool("JoystickEnabled");
 	if (useJoystick)
 	{
 		const int err = SDL_InitSubSystem(SDL_INIT_JOYSTICK);
 		if (err == -1)
 		{
-			LogObject() << "Could not initialise joystick subsystem: " << SDL_GetError();
+			LOG_L(L_ERROR, "Could not initialise joystick subsystem: %s",
+					SDL_GetError());
 			return;
 		}
 		else
@@ -33,19 +37,20 @@ void InitJoystick()
 Joystick::Joystick()
 {
 	const int numSticks = SDL_NumJoysticks();
-	LogObject() << "Joysticks found: " << numSticks;
-	
-	const int stickNum = configHandler->Get("JoystickUse", 0);
+	LOG("Joysticks found: %i", numSticks);
+
+	const int stickNum = configHandler->GetInt("JoystickUse");
+
 	myStick =  SDL_JoystickOpen(stickNum);
-	
+
 	if (myStick)
 	{
-		LogObject() << "Using joystick " << stickNum << ": " << SDL_JoystickName(stickNum);
+		LOG("Using joystick %i: %s", stickNum, SDL_JoystickName(stickNum));
 		inputCon = input.AddHandler(boost::bind(&Joystick::HandleEvent, this, _1));
 	}
 	else
 	{
-		LogObject() << "Joystick " << stickNum << " not found";
+		LOG_L(L_ERROR, "Joystick %i not found", stickNum);
 	}
 }
 

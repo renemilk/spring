@@ -1,20 +1,19 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <algorithm>
 #include <assert.h>
 #include <locale>
 #include <cctype>
 #include <vector>
 #include <string>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Rendering/GL/myGL.h"
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
 #include "IconHandler.h"
 #include "Lua/LuaParser.h"
 #include "Textures/Bitmap.h"
-#include "Exceptions.h"
+#include "System/Exceptions.h"
 
 namespace icon {
 using std::string;
@@ -56,8 +55,8 @@ bool CIconHandler::LoadIcons(const string& filename)
 {
 	LuaParser luaParser(filename, SPRING_VFS_MOD_BASE, SPRING_VFS_MOD_BASE);
 	if (!luaParser.Execute()) {
-		logOutput.Print("%s: %s",
-		                filename.c_str(), luaParser.GetErrorLog().c_str());
+		LOG_L(L_WARNING, "%s: %s",
+				filename.c_str(), luaParser.GetErrorLog().c_str());
 	}
 
 	const LuaTable iconTypes = luaParser.GetRoot();
@@ -107,9 +106,10 @@ bool CIconHandler::AddIcon(const string& iconName, const string& textureName,
 			ysize = 128;
 			ownTexture = false;
 		}
-	}
-	catch (const content_error&) {
-		return false; // bail on non-existant file.
+	} catch (const content_error& ex) {
+		// bail on non-existant file
+		LOG_L(L_DEBUG, "Failed to add icon: %s", ex.what());
+		return false;
 	}
 
 	IconMap::iterator it = iconMap.find(iconName);

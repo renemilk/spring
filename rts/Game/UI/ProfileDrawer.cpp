@@ -1,11 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <assert.h>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ProfileDrawer.h"
-#include "TimeProfiler.h"
+#include "System/TimeProfiler.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/glFont.h"
 #include "Rendering/GL/VertexArray.h"
@@ -18,6 +17,11 @@ void ProfileDrawer::SetEnabled(bool enable)
 	if (enable) {
 		assert(instance == NULL);
 		instance = new ProfileDrawer();
+		GML_STDMUTEX_LOCK_NOPROF(time); // SetEnabled
+		// reset peak indicators each time the drawer is restarted
+		std::map<std::string, CTimeProfiler::TimeRecord>::iterator pi;
+		for (pi = profiler.profile.begin(); pi != profiler.profile.end(); ++pi)
+			(*pi).second.peak = 0.0f;
 	} else {
 		ProfileDrawer* tmpInstance = instance;
 		instance = NULL;
@@ -58,21 +62,23 @@ void ProfileDrawer::Draw()
 	font->Begin();
 	for (pi = profiler.profile.begin(); pi != profiler.profile.end(); ++pi, ++y) {
 #if GML_MUTEX_PROFILER
-		if (pi->first.size()<5 || pi->first.substr(pi->first.size()-5,5).compare("Mutex")!=0) { --y; continue; }
+		const float fStartY = start_y - y * 0.018f;
+#else
+		const float fStartY = start_y - y * 0.024f;
 #endif
 		const float s = ((float)pi->second.total) / 1000.0f;
 		const float p = pi->second.percent * 100;
 		float fStartX = start_x + 0.005f + 0.015f + 0.005f;
-		const float fStartY = start_y - y * 0.024f;
 
 		// print total-time running since application start
 		fStartX += 0.09f;
 		font->glFormat(fStartX, fStartY, 0.7f, FONT_BASELINE | FONT_SCALE | FONT_NORM | FONT_RIGHT, "%.2fs", s);
 
 		// print percent of CPU time used within the last 500ms
-		fStartX += 0.08f;
+		fStartX += 0.04f;
 		font->glFormat(fStartX, fStartY, 0.7f, FONT_BASELINE | FONT_SCALE | FONT_NORM | FONT_RIGHT, "%.2f%%", p);
-
+		fStartX += 0.04f;
+		font->glFormat(fStartX, fStartY, 0.7f, FONT_BASELINE | FONT_SCALE | FONT_NORM | FONT_RIGHT, "\xff\xff%c%c%.2f%%", pi->second.newpeak?1:255, pi->second.newpeak?1:255, pi->second.peak * 100);
 		// print timer name
 		fStartX += 0.01f;
 		font->glFormat(fStartX, fStartY, 0.7f, FONT_BASELINE | FONT_SCALE | FONT_NORM, "%s", pi->first.c_str());

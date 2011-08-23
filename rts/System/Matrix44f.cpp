@@ -1,9 +1,8 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "Matrix44f.h"
+#include "System/Matrix44f.h"
 #include <memory.h>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 CR_BIND(CMatrix44f, );
 

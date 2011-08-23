@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef GLOBALCONFIG_H
-#define GLOBALCONFIG_H
+#ifndef _GLOBAL_CONFIG_H
+#define _GLOBAL_CONFIG_H
 #include "lib/gml/gmlcnf.h"
 
 
@@ -12,6 +12,14 @@ public:
 	static void Instantiate();
 
 	static void Deallocate();
+
+	/**
+	 * @brief network loss factor
+	 *
+	 * Network loss factor, a higher factor will reconfigure the protocol 
+	 * to resend data more frequently, i.e. waste bandwidth to reduce lag
+	 */
+	int networkLossFactor;
 
 	/**
 	 * @brief initial network timeout
@@ -30,7 +38,8 @@ public:
 	/**
 	 * @brief reconnect timeout
 	 *
-	 * Network timeout in seconds after which a player is allowed to reconnect with a different IP
+	 * Network timeout in seconds after which a player is allowed to reconnect
+	 * with a different IP.
 	 */
 	int reconnectTimeout;
 
@@ -44,7 +53,8 @@ public:
 	/**
 	 * @brief teamHighlight
 	 *
-	 * Team highlighting for teams that are uncontrolled or have connection problems
+	 * Team highlighting for teams that are uncontrolled or have connection
+	 * problems.
 	 */
 	int teamHighlight;
 
@@ -88,12 +98,8 @@ public:
 	 * @brief multiThreadLua
 	 *
 	 * LuaHandle threading mode for Spring MT:
-	 * 0: Use 'luaThreadingModel' setting from modInfo (default)
-	 * 1: Single Lua state (fully backwards compatible but slow)
-	 * 2: Single Lua state, batching of unsynced events
-	 * 3: Dual Lua states for synced, batching of unsynced events, synced/unsynced gadget communication via EXPORT table and SendToUnsynced
-	 * 4: Dual Lua states for synced, batching of unsynced events, synced/unsynced gadget communication via SendToUnsynced only
-	 * 5: Dual Lua states for all, all synced/unsynced communication (widgets included) via SendToUnsynced only
+	 * 
+	 * See LuaConfig.h and ModInfo::luaThreadingModel
 	 */
 	int multiThreadLua;
 	bool enableDrawCallIns;
@@ -101,6 +107,6 @@ public:
 	int GetMultiThreadLua();
 };
 
-extern GlobalConfig* gc;
+extern GlobalConfig* globalConfig;
 
-#endif // GLOBALCONFIG_H
+#endif // _GLOBAL_CONFIG_H

@@ -5,16 +5,16 @@
  * EXT_framebuffer_object class implementation
  */
 
-#include "StdAfx.h"
 #include <assert.h>
 #include <vector>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "FBO.h"
-#include "LogOutput.h"
-#include "GlobalUnsynced.h"
-#include "ConfigHandler.h"
 #include "Rendering/Textures/Bitmap.h"
+#include "System/Log/ILog.h"
+#include "System/Config/ConfigHandler.h"
+
+CONFIG(bool, AtiSwapRBFix).defaultValue(false);
 
 std::vector<FBO*> FBO::fboList;
 std::map<GLuint,FBO::TexData*> FBO::texBuf;
@@ -109,7 +109,7 @@ void FBO::DownloadAttachment(const GLenum attachment)
 		glGetTexLevelParameteriv(target, 0, GL_TEXTURE_DEPTH_SIZE, &_cbits); bits += _cbits;
 	}
 
-	if (configHandler->Get("AtiSwapRBFix",false)) {
+	if (configHandler->GetBool("AtiSwapRBFix")) {
 		if (tex->format == GL_RGBA) {
 			tex->format = GL_BGRA;
 		} else if (tex->format == GL_RGB) {
@@ -180,7 +180,7 @@ void FBO::GLContextReinit()
 
 		if (glIsTexture(tex->id)) {
 			glBindTexture(tex->target,tex->id);
-			//todo: regen mipmaps?
+			// TODO regen mipmaps?
 			switch (tex->target) {
 				case GL_TEXTURE_3D:
 					//glTexSubImage3D(tex->target, 0, 0,0,0, tex->xsize, tex->ysize, tex->zsize, /*FIXME?*/GL_RGBA, /*FIXME?*/GL_UNSIGNED_BYTE, tex->pixels);
@@ -194,8 +194,8 @@ void FBO::GLContextReinit()
 					//glTexSubImage2D(tex->target, 0, 0,0, tex->xsize, tex->ysize, /*FIXME?*/GL_RGBA, /*FIXME?*/GL_UNSIGNED_BYTE, tex->pixels);
 					glTexImage2D(tex->target, 0, tex->format, tex->xsize, tex->ysize, 0, /*FIXME?*/GL_RGBA, /*FIXME?*/GL_UNSIGNED_BYTE, tex->pixels);
 			}
-		}else if (glIsRenderbufferEXT(tex->id)) {
-			//FIXME
+		} else if (glIsRenderbufferEXT(tex->id)) {
+			// FIXME implement rendering buffer context init
 		}
 
 		delete[] tex->pixels;
@@ -300,28 +300,28 @@ bool FBO::CheckStatus(std::string name)
 			valid = true;
 			return true;
 		case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_EXT:
-			logOutput.Print("FBO-"+name+": no/unsupported textures/buffers attached!");
+			LOG_L(L_WARNING, "FBO-%s: no/unsupported textures/buffers attached!", name.c_str());
 			break;
 		case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT_EXT:
-			logOutput.Print("FBO-"+name+": missing a required texture/buffer attachment!");
+			LOG_L(L_WARNING, "FBO-%s: missing a required texture/buffer attachment!", name.c_str());
 			break;
 		case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT:
-			logOutput.Print("FBO-"+name+": has mismatched texture/buffer dimensions!");
+			LOG_L(L_WARNING, "FBO-%s: has mismatched texture/buffer dimensions!", name.c_str());
 			break;
 		case GL_FRAMEBUFFER_INCOMPLETE_FORMATS_EXT:
-			logOutput.Print("FBO-"+name+": colorbuffer attachments have different types!");
+			LOG_L(L_WARNING, "FBO-%s: colorbuffer attachments have different types!", name.c_str());
 			break;
 		case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER_EXT:
-			logOutput.Print("FBO-"+name+": incomplete draw buffers!");
+			LOG_L(L_WARNING, "FBO-%s: incomplete draw buffers!", name.c_str());
 			break;
 		case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER_EXT:
-			logOutput.Print("FBO-"+name+": trying to read from a non-attached color buffer!");
+			LOG_L(L_WARNING, "FBO-%s: trying to read from a non-attached color buffer!", name.c_str());
 			break;
 		case GL_FRAMEBUFFER_UNSUPPORTED_EXT:
-			logOutput.Print("FBO-"+name+" error: GL_FRAMEBUFFER_UNSUPPORTED_EXT");
+			LOG_L(L_WARNING, "FBO-%s error: GL_FRAMEBUFFER_UNSUPPORTED_EXT", name.c_str());
 			break;
 		default:
-			logOutput.Print(std::string("FBO-"+name+" error: 0x%X").c_str(),status);
+			LOG_L(L_WARNING, "FBO-%s error: 0x%X", name.c_str(), status);
 			break;
 	}
 	valid = false;

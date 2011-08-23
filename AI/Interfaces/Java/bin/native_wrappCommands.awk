@@ -316,8 +316,10 @@ function canDeleteDocumentation() {
 
 	cmdsNumMembers[ind_cmdStructs] = ind_cmdMember;
 	cmdsTopicName[ind_cmdStructs]  = $3;
-	cmdsMetaInfo[ind_cmdStructs]   = $0;
-	sub(/^}; \/\/\$ COMMAND_[^ \t]+[ \t]+/, "", cmdsMetaInfo[ind_cmdStructs]);
+	metaInfo = $0;
+	sub(/^}; \/\/\$ COMMAND_[^ \t]+/, "", metaInfo);
+	metaInfo = trim(metaInfo);
+	cmdsMetaInfo[ind_cmdStructs]   = metaInfo;
 
 	if (doWrapp(ind_cmdStructs)) {
 		#printCommandJava(ind_cmdStructs);
@@ -349,7 +351,7 @@ function canDeleteDocumentation() {
 }
 
 # beginn of struct S*Command
-/^\struct S.*Command( \{)?/ {
+/^struct S.*Command( \{)?/ {
 
 	isInsideCmdStruct = 1;
 	ind_cmdMember = 0;

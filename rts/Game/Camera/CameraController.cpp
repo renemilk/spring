@@ -1,17 +1,20 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "CameraController.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
+
+
+CONFIG(float, UseDistToGroundForIcons).defaultValue(0.95f);
+
 
 CCameraController::CCameraController()
 {
 	// switchVal:
 	// * 1.0 = 0 degree  = overview
 	// * 0.0 = 90 degree = first person
-	switchVal = configHandler->Get("UseDistToGroundForIcons", 0.95f);
+	switchVal = configHandler->GetFloat("UseDistToGroundForIcons");
 	scrollSpeed = 1;
 	fov = 45.0f;
 	pixelSize = 1.0f;

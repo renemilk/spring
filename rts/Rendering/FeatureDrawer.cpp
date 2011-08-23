@@ -1,24 +1,24 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include "FeatureDrawer.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Lua/LuaRules.h"
 #include "Map/MapInfo.h"
 #include "Map/ReadMap.h"
 #include "Map/BaseGroundDrawer.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/FarTextureHandler.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/Env/ITreeDrawer.h"
-#include "Rendering/Env/BaseWater.h"
+#include "Rendering/Env/IWater.h"
 #include "Rendering/GL/glExtra.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/ShadowHandler.h"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/S3OTextureHandler.h"
 #include "Rendering/Textures/3DOTextureHandler.h"
 #include "Rendering/UnitDrawer.h"
@@ -26,13 +26,14 @@
 #include "Sim/Features/Feature.h"
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Misc/GlobalSynced.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
-#include "System/GlobalUnsynced.h"
 #include "System/myMath.h"
 #include "System/Util.h"
 
 #define DRAW_QUAD_SIZE 32
+
+CONFIG(bool, ShowRezBars).defaultValue(true);
 
 CFeatureDrawer* featureDrawer = NULL;
 
@@ -57,7 +58,7 @@ CFeatureDrawer::CFeatureDrawer(): CEventClient("[CFeatureDrawer]", 313373, false
 	drawQuadsY = gs->mapy/DRAW_QUAD_SIZE;
 	drawQuads.resize(drawQuadsX * drawQuadsY);
 #ifdef USE_GML
-	showRezBars = !!configHandler->Get("ShowRezBars", 1);
+	showRezBars = configHandler->GetBool("ShowRezBars");
 #endif
 	opaqueModelRenderers.resize(MODELTYPE_OTHER, NULL);
 	cloakedModelRenderers.resize(MODELTYPE_OTHER, NULL);
@@ -87,7 +88,9 @@ CFeatureDrawer::~CFeatureDrawer()
 void CFeatureDrawer::RenderFeatureCreated(const CFeature* feature)
 {
 	CFeature* f = const_cast<CFeature*>(feature);
-#if defined(USE_GML) && GML_ENABLE_SIM
+	texturehandlerS3O->UpdateDraw();
+
+#if defined(USE_GML) && GML_ENABLE_SIM && !GML_SHARE_LISTS
 	if(f->model && TEX_TYPE(f) < 0)
 		TEX_TYPE(f) = texturehandlerS3O->LoadS3OTextureNow(f->model);
 #endif
@@ -131,10 +134,18 @@ void CFeatureDrawer::UpdateDrawQuad(CFeature* feature)
 {
 	const int oldDrawQuad = feature->drawQuad;
 	if (oldDrawQuad >= -1) {
-		const int newDrawQuad =
-			int(feature->pos.z / DRAW_QUAD_SIZE / SQUARE_SIZE) * drawQuadsX +
-			int(feature->pos.x / DRAW_QUAD_SIZE / SQUARE_SIZE);
+		int newDrawQuadX = feature->pos.x / DRAW_QUAD_SIZE / SQUARE_SIZE;
+		int newDrawQuadY = feature->pos.z / DRAW_QUAD_SIZE / SQUARE_SIZE;
+		newDrawQuadX = Clamp(newDrawQuadX, 0, drawQuadsX - 1);
+		newDrawQuadY = Clamp(newDrawQuadY, 0, drawQuadsY - 1);
+		const int newDrawQuad = newDrawQuadY * drawQuadsX + newDrawQuadX;
+
 		if (oldDrawQuad != newDrawQuad) {
+			//TODO check if out of map features get drawn, when the camera is outside of the map
+			//     (q: does DrawGround render the border quads in such cases?)
+			assert(oldDrawQuad < drawQuadsX * drawQuadsY);
+			assert(newDrawQuad < drawQuadsX * drawQuadsY);
+
 			if (oldDrawQuad >= 0)
 				drawQuads[oldDrawQuad].features.erase(feature);
 			drawQuads[newDrawQuad].features.insert(feature);
@@ -171,7 +182,7 @@ inline void CFeatureDrawer::UpdateDrawPos(CFeature* f)
 
 void CFeatureDrawer::Draw()
 {
-	IBaseSky::SetFog();
+	ISky::SetupFog();
 
 	GML_RECMUTEX_LOCK(feat); // Draw
 
@@ -247,7 +258,7 @@ void CFeatureDrawer::DrawOpaqueFeatures(int modelType)
 void CFeatureDrawer::DrawFeatureStats()
 {
 	if (!drawStat.empty()) {
-		if (!water->drawReflection) {
+		if (!water->IsDrawReflection()) {
 			for (std::vector<CFeature *>::iterator fi = drawStat.begin(); fi != drawStat.end(); ++fi) {
 				DrawFeatureStatBars(*fi);
 			}
@@ -335,7 +346,7 @@ void CFeatureDrawer::DrawFadeFeatures(bool noAdvShading)
 		glEnable(GL_ALPHA_TEST);
 		glAlphaFunc(GL_GREATER, 0.5f);
 
-		IBaseSky::SetFog();
+		ISky::SetupFog();
 
 		{
 			GML_RECMUTEX_LOCK(feat); // DrawFadeFeatures
@@ -490,7 +501,7 @@ public:
 							camera->pos * (f->midPos.y / dif) +
 							f->midPos * (-camera->pos.y / dif);
 					}
-					if (ground->GetApproximateHeight(zeroPos.x, zeroPos.z) > f->drawRadius) {
+					if (ground->GetApproximateHeight(zeroPos.x, zeroPos.z, false) > f->drawRadius) {
 						continue;
 					}
 				}
@@ -550,8 +561,8 @@ void CFeatureDrawer::GetVisibleFeatures(int extraSize, bool drawFar)
 	CFeatureQuadDrawer drawer;
 	drawer.drawQuads = &drawQuads;
 	drawer.drawQuadsX = drawQuadsX;
-	drawer.drawReflection = water->drawReflection;
-	drawer.drawRefraction = water->drawRefraction;
+	drawer.drawReflection = water->IsDrawReflection();
+	drawer.drawRefraction = water->IsDrawRefraction();
 	drawer.unitDrawDist = unitDrawer->unitDrawDist;
 	drawer.sqFadeDistEnd = featureDist * featureDist;
 	drawer.sqFadeDistBegin = 0.75f * 0.75f * featureDist * featureDist;

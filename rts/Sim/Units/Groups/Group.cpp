@@ -1,14 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include "Group.h"
 #include "GroupHandler.h"
-//#include "Game/SelectedUnits.h"
-//#include "Sim/Units/Unit.h"
-#include "System/GlobalUnsynced.h"
+#include "Game/GlobalUnsynced.h"
 #include "System/EventHandler.h"
-#include "System/LogOutput.h"
 #include "System/Platform/errorhandler.h"
 #include "System/mmgr.h"
 #include "System/creg/STL_Set.h"

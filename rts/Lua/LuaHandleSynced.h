@@ -42,7 +42,7 @@ class CLuaHandleSynced : public CLuaHandle
 
 	public: // custom call-in
 		bool HasSyncedXCall(const string& funcName);
-		bool HasUnsyncedXCall(const string& funcName);
+		bool HasUnsyncedXCall(lua_State* srcState, const string& funcName);
 		int XCall(lua_State* L, lua_State* srcState, const string& funcName);
 		int SyncedXCall(lua_State* srcState, const string& funcName);
 		int UnsyncedXCall(lua_State* srcState, const string& funcName);
@@ -71,10 +71,12 @@ class CLuaHandleSynced : public CLuaHandle
 
 	protected:
 		static CLuaHandleSynced* GetActiveHandle() {
-			return dynamic_cast<CLuaHandleSynced*>(CLuaHandle::GetActiveHandle());
+			assert(dynamic_cast<CLuaHandleSynced*>(CLuaHandle::GetActiveHandle()));
+			return static_cast<CLuaHandleSynced*>(CLuaHandle::GetActiveHandle());
 		}
 		static CLuaHandleSynced* GetActiveHandle(lua_State *L) {
-			return dynamic_cast<CLuaHandleSynced*>(CLuaHandle::GetActiveHandle(L));
+			assert(dynamic_cast<CLuaHandleSynced*>(CLuaHandle::GetActiveHandle(L)));
+			return static_cast<CLuaHandleSynced*>(CLuaHandle::GetActiveHandle(L));
 		}
 
 	private:
@@ -95,8 +97,12 @@ class CLuaHandleSynced : public CLuaHandle
 		static int AddSyncedActionFallback(lua_State* L);
 		static int RemoveSyncedActionFallback(lua_State* L);
 
-		static int GetWatchWeapon(lua_State* L);
-		static int SetWatchWeapon(lua_State* L);
+		static int GetWatchUnitDef(lua_State* L);
+		static int SetWatchUnitDef(lua_State* L);
+		static int GetWatchFeatureDef(lua_State* L);
+		static int SetWatchFeatureDef(lua_State* L);
+		static int GetWatchWeaponDef(lua_State* L);
+		static int SetWatchWeaponDef(lua_State* L);
 
 	private:
 		//FIXME: add to CREG?

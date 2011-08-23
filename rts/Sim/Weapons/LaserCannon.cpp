@@ -1,14 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "Game/TraceRay.h"
 #include "LaserCannon.h"
 #include "Map/Ground.h"
-#include "Sim/MoveTypes/AirMoveType.h"
+#include "Sim/MoveTypes/StrafeAirMoveType.h"
 #include "Sim/Projectiles/WeaponProjectiles/LaserProjectile.h"
 #include "Sim/Units/Unit.h"
 #include "WeaponDefHandler.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CLaserCannon, CWeapon, (NULL));
 
@@ -70,10 +69,9 @@ bool CLaserCannon::TryTarget(const float3& pos, bool userTarget, CUnit* unit)
 	dir /= length;
 
 	if (!onlyForward) {
-		// skip ground col testing for aircraft
-		float g = ground->LineGroundCol(weaponMuzzlePos, pos);
-		if (g > 0 && g < length * 0.9f)
+		if (!HaveFreeLineOfFire(weaponMuzzlePos, dir, length, unit)) {
 			return false;
+		}
 	}
 
 	const float spread =
@@ -101,8 +99,8 @@ void CLaserCannon::Init(void)
 void CLaserCannon::FireImpl()
 {
 	float3 dir;
-	if (onlyForward && dynamic_cast<CAirMoveType*>(owner->moveType)) {
-		// the taairmovetype cant align itself properly, change back when that is fixed
+	if (onlyForward && dynamic_cast<CStrafeAirMoveType*>(owner->moveType)) {
+		// HoverAirMovetype cannot align itself properly, change back when that is fixed
 		dir = owner->frontdir;
 	} else {
 		dir = targetPos - weaponMuzzlePos;
@@ -122,7 +120,7 @@ void CLaserCannon::FireImpl()
 	}
 
 	new CLaserProjectile(weaponMuzzlePos, dir * projectileSpeed, owner,
-		weaponDef->duration * weaponDef->maxvelocity,
+		weaponDef->duration * (weaponDef->projectilespeed * GAME_SPEED),
 		weaponDef->visuals.color, weaponDef->visuals.color2,
 		weaponDef->intensity, weaponDef,
 		(int) ((weaponDef->range - fpsSub) / weaponDef->projectilespeed) - 6);

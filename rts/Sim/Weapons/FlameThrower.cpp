@@ -1,13 +1,12 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "FlameThrower.h"
 #include "Game/TraceRay.h"
 #include "Map/Ground.h"
 #include "Sim/Projectiles/WeaponProjectiles/FlameProjectile.h"
 #include "Sim/Units/Unit.h"
 #include "WeaponDefHandler.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CFlameThrower, CWeapon, (NULL));
 
@@ -60,9 +59,9 @@ bool CFlameThrower::TryTarget(const float3 &pos, bool userTarget, CUnit* unit)
 
 	dir /= length;
 
-	const float g = ground->LineGroundCol(weaponMuzzlePos, pos);
-	if (g > 0 && g < length * 0.9f)
+	if (!HaveFreeLineOfFire(weaponMuzzlePos, dir, length, unit)) {
 		return false;
+	}
 
 	if (avoidFeature && TraceRay::LineFeatureCol(weaponMuzzlePos, dir, length)) {
 		return false;

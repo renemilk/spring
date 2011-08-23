@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "UnitDrawer.h"
 
@@ -9,6 +8,7 @@
 #include "Game/CameraHandler.h"
 #include "Game/GameHelper.h"
 #include "Game/GameSetup.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/Player.h"
 #include "Game/UI/MiniMap.h"
 #include "Lua/LuaMaterial.h"
@@ -19,8 +19,8 @@
 #include "Map/MapInfo.h"
 #include "Map/ReadMap.h"
 
-#include "Rendering/Env/BaseSky.h"
-#include "Rendering/Env/BaseWater.h"
+#include "Rendering/Env/ISky.h"
+#include "Rendering/Env/IWater.h"
 #include "Rendering/Env/CubeMapHandler.h"
 #include "Rendering/FarTextureHandler.h"
 #include "Rendering/glFont.h"
@@ -29,8 +29,8 @@
 #include "Rendering/GroundDecalHandler.h"
 #include "Rendering/IconHandler.h"
 #include "Rendering/ShadowHandler.h"
-#include "Rendering/Shaders/ShaderHandler.hpp"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/ShaderHandler.h"
+#include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/Textures/3DOTextureHandler.h"
 #include "Rendering/Textures/S3OTextureHandler.h"
@@ -51,11 +51,11 @@
 #include "Sim/Units/UnitTypes/TransportUnit.h"
 #include "Sim/Weapons/Weapon.h"
 
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/myMath.h"
+#include "System/TimeProfiler.h"
 #include "System/Util.h"
 
 #ifdef USE_GML
@@ -67,6 +67,23 @@ extern gmlClientServer<void, int, CUnit*> *gmlProcessor;
 
 CUnitDrawer* unitDrawer;
 
+CONFIG(int, UnitLodDist).defaultValue(1000);
+CONFIG(int, UnitIconDist).defaultValue(10000);
+CONFIG(float, UnitTransparency).defaultValue(0.7f);
+CONFIG(bool, ShowHealthBars).defaultValue(true);
+CONFIG(bool, MultiThreadDrawUnit).defaultValue(true);
+CONFIG(bool, MultiThreadDrawUnitShadow).defaultValue(true);
+
+CONFIG(int, MaxDynamicModelLights)
+	.defaultValue(1)
+	.minimumValue(0);
+
+CONFIG(bool, AdvUnitShading).defaultValue(true);
+CONFIG(float, LODScale).defaultValue(1.0f);
+CONFIG(float, LODScaleShadow).defaultValue(1.0f);
+CONFIG(float, LODScaleReflection).defaultValue(1.0f);
+CONFIG(float, LODScaleRefraction).defaultValue(1.0f);
+
 static bool LUA_DRAWING = false; // FIXME
 static float UNIT_GLOBAL_LOD_FACTOR = 1.0f;
 
@@ -75,38 +92,33 @@ inline static void SetUnitGlobalLODFactor(float value)
 	UNIT_GLOBAL_LOD_FACTOR = (value * camera->lppScale);
 }
 
-static float GetLODFloat(const string& name, float def)
+static float GetLODFloat(const string& name)
 {
 	// NOTE: the inverse of the value is used
-	char buf[64];
-	SNPRINTF(buf, sizeof(buf), "%.3f", def);
-	const string valueStr = configHandler->GetString(name, buf);
-	char* end;
-	float value = (float)strtod(valueStr.c_str(), &end);
-	if ((end == valueStr.c_str()) || (value <= 0.0f)) {
-		return (1.0f / def);
+	const float value = configHandler->GetFloat(name);
+	if (value <= 0.0f) {
+		return 1.0f;
 	}
 	return (1.0f / value);
 }
-
 
 
 CUnitDrawer::CUnitDrawer(): CEventClient("[CUnitDrawer]", 271828, false)
 {
 	eventHandler.AddClient(this);
 
-	SetUnitDrawDist((float)configHandler->Get("UnitLodDist",  1000));
-	SetUnitIconDist((float)configHandler->Get("UnitIconDist", 10000));
+	SetUnitDrawDist((float)configHandler->GetInt("UnitLodDist"));
+	SetUnitIconDist((float)configHandler->GetInt("UnitIconDist"));
 
-	LODScale           = GetLODFloat("LODScale",           1.0f);
-	LODScaleShadow     = GetLODFloat("LODScaleShadow",     1.0f);
-	LODScaleReflection = GetLODFloat("LODScaleReflection", 1.0f);
-	LODScaleRefraction = GetLODFloat("LODScaleRefraction", 1.0f);
+	LODScale           = GetLODFloat("LODScale");
+	LODScaleShadow     = GetLODFloat("LODScaleShadow");
+	LODScaleReflection = GetLODFloat("LODScaleReflection");
+	LODScaleRefraction = GetLODFloat("LODScaleRefraction");
 
 	unitAmbientColor = mapInfo->light.unitAmbientColor;
 	unitSunColor = mapInfo->light.unitSunColor;
 
-	cloakAlpha  = std::max(0.11f, std::min(1.0f, 1.0f - configHandler->Get("UnitTransparency", 0.7f)));
+	cloakAlpha  = std::max(0.11f, std::min(1.0f, 1.0f - configHandler->GetFloat("UnitTransparency")));
 	cloakAlpha1 = std::min(1.0f, cloakAlpha + 0.1f);
 	cloakAlpha2 = std::min(1.0f, cloakAlpha + 0.2f);
 	cloakAlpha3 = std::min(1.0f, cloakAlpha + 0.4f);
@@ -115,7 +127,7 @@ CUnitDrawer::CUnitDrawer(): CEventClient("[CUnitDrawer]", 271828, false)
 	for (int unitDefID = 1; unitDefID < unitDefHandler->unitDefs.size(); unitDefID++) {
 		UnitDef* ud = unitDefHandler->unitDefs[unitDefID];
 
-		for (std::vector<std::string>::const_iterator it = ud->sfxExplGenNames.begin(); it != ud->sfxExplGenNames.end(); ++it) {
+		for (std::vector<std::string>::const_iterator it = ud->modelCEGTags.begin(); it != ud->modelCEGTags.end(); ++it) {
 			ud->sfxExplGens.push_back(explGenHandler->LoadGenerator(*it));
 		}
 
@@ -147,12 +159,12 @@ CUnitDrawer::CUnitDrawer(): CEventClient("[CUnitDrawer]", 271828, false)
 	unitRadarIcons.resize(teamHandler->ActiveAllyTeams());
 
 #ifdef USE_GML
-	showHealthBars = !!configHandler->Get("ShowHealthBars", 1);
-	multiThreadDrawUnit = !!configHandler->Get("MultiThreadDrawUnit", 1);
-	multiThreadDrawUnitShadow = !!configHandler->Get("MultiThreadDrawUnitShadow", 1);
+	showHealthBars = configHandler->GetBool("ShowHealthBars");
+	multiThreadDrawUnit = configHandler->GetBool("MultiThreadDrawUnit");
+	multiThreadDrawUnitShadow = configHandler->GetBool("MultiThreadDrawUnitShadow");
 #endif
 
-	lightHandler.Init(2U, configHandler->Get("MaxDynamicModelLights", 4U));
+	lightHandler.Init(2U, configHandler->GetInt("MaxDynamicModelLights"));
 
 	advFade = GLEW_NV_vertex_program2;
 	advShading = (LoadModelShaders() && cubeMapHandler->Init());
@@ -224,10 +236,12 @@ bool CUnitDrawer::LoadModelShaders()
 
 	if (!globalRendering->haveARB) {
 		// not possible to do (ARB) shader-based model rendering
-		logOutput.Print("[LoadModelShaders] OpenGL ARB extensions missing for advanced unit shading");
+		LOG_L(L_WARNING,
+				"[%s] OpenGL ARB extensions missing for advanced unit shading",
+				__FUNCTION__);
 		return false;
 	}
-	if (configHandler->Get("AdvUnitShading", 1) == 0) {
+	if (!configHandler->GetBool("AdvUnitShading")) {
 		// not allowed to do shader-based model rendering
 		return false;
 	}
@@ -357,7 +371,7 @@ void CUnitDrawer::Update()
 	if (useDistToGroundForIcons) {
 		const float3& camPos = camera->pos;
 		// use the height at the current camera position
-		//const float groundHeight = ground->GetHeightAboveWater(camPos.x, camPos.z);
+		//const float groundHeight = ground->GetHeightAboveWater(camPos.x, camPos.z, false);
 		// use the middle between the highest and lowest position on the map as average
 		const float groundHeight = (readmap->currMinHeight + readmap->currMaxHeight) / 2;
 		const float overGround = camPos.y - groundHeight;
@@ -374,9 +388,11 @@ void CUnitDrawer::Update()
 //! only called by DrawOpaqueUnit
 inline bool CUnitDrawer::DrawUnitLOD(CUnit* unit)
 {
+	GML_LODMUTEX_LOCK(unit); // DrawUnitLOD
+
 	if (unit->lodCount > 0) {
 		if (unit->isCloaked) {
-			const LuaMatType matType = (water->drawReflection)?
+			const LuaMatType matType = (water->IsDrawReflection())?
 				LUAMAT_ALPHA_REFLECT: LUAMAT_ALPHA;
 			LuaUnitMaterial& unitMat = unit->luaMats[matType];
 			const unsigned lod = CalcUnitLOD(unit, unitMat.GetLastLOD());
@@ -388,7 +404,7 @@ inline bool CUnitDrawer::DrawUnitLOD(CUnit* unit)
 			}
 		} else {
 			const LuaMatType matType =
-				(water->drawReflection) ? LUAMAT_OPAQUE_REFLECT : LUAMAT_OPAQUE;
+				(water->IsDrawReflection()) ? LUAMAT_OPAQUE_REFLECT : LUAMAT_OPAQUE;
 			LuaUnitMaterial& unitMat = unit->luaMats[matType];
 			const unsigned lod = CalcUnitLOD(unit, unitMat.GetLastLOD());
 			unit->currentLOD = lod;
@@ -427,7 +443,7 @@ inline void CUnitDrawer::DrawOpaqueUnit(CUnit* unit, const CUnit* excludeUnit, b
 					camera->pos  * (unit->drawMidPos.y / dif) +
 					unit->drawMidPos * (-camera->pos.y / dif);
 			}
-			if (ground->GetApproximateHeight(zeroPos.x, zeroPos.z) > unit->drawRadius) {
+			if (ground->GetApproximateHeight(zeroPos.x, zeroPos.z, false) > unit->drawRadius) {
 				return;
 			}
 		}
@@ -459,7 +475,7 @@ inline void CUnitDrawer::DrawOpaqueUnit(CUnit* unit, const CUnit* excludeUnit, b
 void CUnitDrawer::Draw(bool drawReflection, bool drawRefraction)
 {
 	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-	IBaseSky::SetFog();
+	ISky::SetupFog();
 
 	if (drawReflection) {
 		SetUnitGlobalLODFactor(LODScale * LODScaleReflection);
@@ -521,10 +537,10 @@ void CUnitDrawer::DrawOpaqueUnits(int modelType, const CUnit* excludeUnit, bool 
 		}
 
 		const UnitSet& unitSet = unitBinIt->second;
-
 #ifdef USE_GML
-		if (multiThreadDrawUnit) {
-			gmlProcessor->Work(
+		bool mt = GML_PROFILER(multiThreadDrawUnit)
+		if (mt && unitSet.size() >= gmlThreadCount * 4) { // small unitSets will add a significant overhead
+			gmlProcessor->Work( // Profiler results, 4 threads, one single large unitSet: Approximately 20% faster with multiThreadDrawUnit
 				NULL, NULL, &CUnitDrawer::DrawOpaqueUnitMT, this, gmlThreadCount,
 				FALSE, &unitSet, unitSet.size(), 50, 100, TRUE
 			);
@@ -630,9 +646,15 @@ static void DrawLuaMatBins(LuaMatType type)
 		const int count = (int)units.size();
 		for (int i = 0; i < count; i++) {
 			CUnit* unit = units[i];
+
+			GML_LODMUTEX_LOCK(unit); // DrawLuaMatBins
+
 			const LuaUnitMaterial& unitMat = unit->luaMats[type];
 			const LuaUnitLODMaterial* lodMat = unitMat.GetMaterial(unit->currentLOD);
-
+#ifdef USE_GML
+			if (!lodMat || !lodMat->IsActive())
+				continue;
+#endif
 			lodMat->uniforms.Execute(unit);
 
 			unitDrawer->SetTeamColour(unit->team);
@@ -730,7 +752,7 @@ void CUnitDrawer::DrawOpaqueShaderUnits()
 	luaMatHandler.setupS3oShader = SetupOpaqueS3O;
 	luaMatHandler.resetS3oShader = ResetOpaqueS3O;
 
-	const LuaMatType matType = (water->drawReflection)?
+	const LuaMatType matType = (water->IsDrawReflection())?
 		LUAMAT_OPAQUE_REFLECT:
 		LUAMAT_OPAQUE;
 
@@ -745,7 +767,7 @@ void CUnitDrawer::DrawCloakedShaderUnits()
 	luaMatHandler.setupS3oShader = SetupAlphaS3O;
 	luaMatHandler.resetS3oShader = ResetAlphaS3O;
 
-	const LuaMatType matType = (water->drawReflection)?
+	const LuaMatType matType = (water->IsDrawReflection())?
 		LUAMAT_ALPHA_REFLECT:
 		LUAMAT_ALPHA;
 
@@ -807,6 +829,8 @@ inline void CUnitDrawer::DrawOpaqueUnitShadow(CUnit* unit) {
 	if (unit->isCloaked) { return; }
 	if (DrawAsIcon(unit, sqDist)) { return; }
 
+	GML_LODMUTEX_LOCK(unit); // DrawOpaqueUnitShadow
+
 	if (unit->lodCount <= 0) {
 		PUSH_SHADOW_TEXTURE_STATE(unit->model);
 		DrawUnitNow(unit);
@@ -829,7 +853,6 @@ inline void CUnitDrawer::DrawOpaqueUnitShadow(CUnit* unit) {
 	#undef PUSH_SHADOW_TEXTURE_STATE
 	#undef POP_SHADOW_TEXTURE_STATE
 }
-
 void CUnitDrawer::DrawOpaqueUnitsShadow(int modelType) {
 	typedef std::set<CUnit*> UnitSet;
 	typedef std::map<int, UnitSet> UnitBin;
@@ -843,8 +866,9 @@ void CUnitDrawer::DrawOpaqueUnitsShadow(int modelType) {
 		const UnitSet& unitSet = unitBinIt->second;
 
 #ifdef USE_GML
-		if (multiThreadDrawUnitShadow) {
-			gmlProcessor->Work(
+		bool mt = GML_PROFILER(multiThreadDrawUnitShadow)
+		if (mt && unitSet.size() >= gmlThreadCount * 4) { // small unitSets will add a significant overhead
+			gmlProcessor->Work( // Profiler results, 4 threads, one single large unitSet: Approximately 20% faster with multiThreadDrawUnitShadow
 				NULL, NULL, &CUnitDrawer::DrawOpaqueUnitShadowMT, this, gmlThreadCount,
 				FALSE, &unitSet, unitSet.size(), 50, 100, TRUE
 			);
@@ -948,7 +972,7 @@ void CUnitDrawer::DrawIcon(CUnit* unit, bool useDefaultIcon)
 	}
 
 	// If the icon is partly under the ground, move it up.
-	const float h = ground->GetHeightAboveWater(pos.x, pos.z);
+	const float h = ground->GetHeightAboveWater(pos.x, pos.z, false);
 	if (pos.y < (h + scale)) {
 		pos.y = (h + scale);
 	}
@@ -1168,7 +1192,7 @@ void CUnitDrawer::DrawCloakedAIUnits()
 			SetTeamColour(ti->second.team, cloakAlpha3);
 
 			BuildInfo bi(unitdef, pos, ti->second.facing);
-			pos = helper->Pos2BuildPos(bi);
+			pos = helper->Pos2BuildPos(bi, false);
 
 			const float xsize = bi.GetXSize() * 4;
 			const float zsize = bi.GetZSize() * 4;
@@ -1240,7 +1264,7 @@ void CUnitDrawer::SetupForUnitDrawing()
 	glAlphaFunc(GL_GREATER, 0.5f);
 	glEnable(GL_ALPHA_TEST);
 
-	if (advShading && !water->drawReflection) {
+	if (advShading && !water->IsDrawReflection()) {
 		glMatrixMode(GL_PROJECTION);
 		glPushMatrix();
 		glMultMatrixf(camera->GetViewMatrix());
@@ -1326,7 +1350,7 @@ void CUnitDrawer::CleanUpUnitDrawing() const
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_ALPHA_TEST);
 
-	if (advShading && !water->drawReflection) {
+	if (advShading && !water->IsDrawReflection()) {
 		modelShaders[MODEL_SHADER_S3O_ACTIVE]->Disable();
 
 		glActiveTexture(GL_TEXTURE1);
@@ -1362,7 +1386,7 @@ void CUnitDrawer::CleanUpUnitDrawing() const
 
 void CUnitDrawer::SetTeamColour(int team, float alpha) const
 {
-	if (advShading && !water->drawReflection) {
+	if (advShading && !water->IsDrawReflection()) {
 		const CTeam* t = teamHandler->Team(team);
 		const float4 c = float4(t->color[0] / 255.0f, t->color[1] / 255.0f, t->color[2] / 255.0f, alpha);
 
@@ -1484,7 +1508,7 @@ void CUnitDrawer::UnitDrawingTexturesOn()
 	// XXX FIXME GL_VERTEX_PROGRAM_ARB is very slow on ATIs here for some reason
 	// if clip planes are enabled
 	// check later after driver updates
-	if (advShading && !water->drawReflection) {
+	if (advShading && !water->IsDrawReflection()) {
 		glEnable(GL_TEXTURE_2D);
 		glActiveTexture(GL_TEXTURE1);
 		glEnable(GL_TEXTURE_2D);
@@ -1518,7 +1542,7 @@ void CUnitDrawer::UnitDrawingTexturesOn()
 void CUnitDrawer::UnitDrawingTexturesOff()
 {
 	/* If SetupForUnitDrawing is changed, this may need tweaking too. */
-	if (advShading && !water->drawReflection) {
+	if (advShading && !water->IsDrawReflection()) {
 		glActiveTexture(GL_TEXTURE1); //! 'Shiny' texture.
 		glDisable(GL_TEXTURE_2D);
 		glActiveTexture(GL_TEXTURE2); //! Shadows.
@@ -1557,8 +1581,10 @@ void CUnitDrawer::DrawIndividual(CUnit* unit)
 
 	LuaUnitLODMaterial* lodMat = NULL;
 
+	GML_LODMUTEX_LOCK(unit); // DrawIndividual
+
 	if (unit->lodCount > 0) {
-		const LuaMatType matType = (water->drawReflection)?
+		const LuaMatType matType = (water->IsDrawReflection())?
 			LUAMAT_OPAQUE_REFLECT : LUAMAT_OPAQUE;
 		LuaUnitMaterial& unitMat = unit->luaMats[matType];
 		lodMat = unitMat.GetMaterial(unit->currentLOD);
@@ -1748,7 +1774,7 @@ void CUnitDrawer::DrawUnitBeingBuilt(CUnit* unit)
 	glColorf3(fc * col);
 
 	//! render wireframe with FFP
-	if (!LUA_DRAWING && advShading && !water->drawReflection) {
+	if (!LUA_DRAWING && advShading && !water->IsDrawReflection()) {
 		modelShaders[MODEL_SHADER_S3O_ACTIVE]->Disable();
 	}
 
@@ -1797,7 +1823,7 @@ void CUnitDrawer::DrawUnitBeingBuilt(CUnit* unit)
 	glDisable(GL_CLIP_PLANE1);
 	unitDrawer->UnitDrawingTexturesOn();
 
-	if (!LUA_DRAWING && advShading && !water->drawReflection) {
+	if (!LUA_DRAWING && advShading && !water->IsDrawReflection()) {
 		modelShaders[MODEL_SHADER_S3O_ACTIVE]->Enable();
 	}
 
@@ -1839,6 +1865,13 @@ inline void CUnitDrawer::DrawUnitModel(CUnit* unit) {
 	if (unit->lodCount <= 0) {
 		unit->localmodel->Draw();
 	} else {
+
+		GML_LODMUTEX_LOCK(unit); // DrawUnitModel
+#ifdef USE_GML
+		if (unit->lodCount <= 0) // re-read the value inside the mutex
+			unit->localmodel->Draw();
+		else
+#endif
 		unit->localmodel->DrawLOD(unit->currentLOD);
 	}
 }
@@ -1908,6 +1941,13 @@ void CUnitDrawer::DrawUnitRawModel(CUnit* unit)
 	if (unit->lodCount <= 0) {
 		unit->localmodel->Draw();
 	} else {
+
+		GML_LODMUTEX_LOCK(unit); // DrawUnitRawModel
+#ifdef USE_GML
+		if (unit->lodCount <= 0)
+			unit->localmodel->Draw();
+		else
+#endif
 		unit->localmodel->DrawLOD(unit->currentLOD);
 	}
 }
@@ -2093,12 +2133,13 @@ int CUnitDrawer::ShowUnitBuildSquare(const BuildInfo& buildInfo, const std::vect
 	const int x2 = x1 + (buildInfo.GetXSize() * SQUARE_SIZE);
 	const int z1 = (int) (pos.z - (buildInfo.GetZSize() * 0.5f * SQUARE_SIZE));
 	const int z2 = z1 + (buildInfo.GetZSize() * SQUARE_SIZE);
-	const float h = uh->GetBuildHeight(pos, buildInfo.def);
+	const float h = uh->GetBuildHeight(pos, buildInfo.def, false);
 
 	const int canBuild = uh->TestUnitBuildSquare(
 		buildInfo,
 		feature,
 		-1,
+		false,
 		&canbuildpos,
 		&featurepos,
 		&nobuildpos,
@@ -2185,8 +2226,9 @@ int CUnitDrawer::ShowUnitBuildSquare(const BuildInfo& buildInfo, const std::vect
 void CUnitDrawer::RenderUnitCreated(const CUnit* u, int cloaked) {
 	CUnit* unit = const_cast<CUnit*>(u);
 	CBuilding* building = dynamic_cast<CBuilding*>(unit);
+	texturehandlerS3O->UpdateDraw();
 
-#if defined(USE_GML) && GML_ENABLE_SIM
+#if defined(USE_GML) && GML_ENABLE_SIM && !GML_SHARE_LISTS
 	if (u->model && TEX_TYPE(u) < 0)
 		TEX_TYPE(u) = texturehandlerS3O->LoadS3OTextureNow(u->model);
 	if((unsortedUnits.size() % 10) == 0)
@@ -2352,6 +2394,8 @@ unsigned int CUnitDrawer::CalcUnitShadowLOD(const CUnit* unit, unsigned int last
 
 void CUnitDrawer::SetUnitLODCount(CUnit* unit, unsigned int count)
 {
+	GML_LODMUTEX_LOCK(unit); // SetUnitLODCount
+
 	const unsigned int oldCount = unit->lodCount;
 
 	unit->lodCount = count;
@@ -2365,4 +2409,8 @@ void CUnitDrawer::SetUnitLODCount(CUnit* unit, unsigned int count)
 	for (int m = 0; m < LUAMAT_TYPE_COUNT; m++) {
 		unit->luaMats[m].SetLODCount(count);
 	}
+#ifdef USE_GML
+	if (unit->currentLOD >= count)
+		unit->currentLOD = (count == 0) ? 0 : count - 1;
+#endif
 }

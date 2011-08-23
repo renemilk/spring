@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaScream.h"
 
@@ -9,7 +8,7 @@
 
 #include "LuaHashString.h"
 
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
 
 
 /******************************************************************************/
@@ -64,13 +63,13 @@ int LuaScream::meta_gc(lua_State* L)
 	if (lua_isfunction(L, -1)) {
 		const int error = lua_pcall(L, 0, 0, 0);
 		if (error != 0) {
-			logOutput.Print("Scream: error(%i) = %s",
-											error, lua_tostring(L, -1));
+			LOG_L(L_ERROR, "Scream: error(%i) = %s",
+					error, lua_tostring(L, -1));
 			lua_pop(L, 1);
 		}
 	}
 	else if (lua_isstring(L, -1)) {
-		logOutput.Print("SCREAM: %s", lua_tostring(L, -1));
+		LOG("SCREAM: %s", lua_tostring(L, -1));
 	}
 	luaL_unref(L, LUA_REGISTRYINDEX, *refPtr);
 	return 0;

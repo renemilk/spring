@@ -1,6 +1,17 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
+
+#include "System/mmgr.h"
+
+#include "GameSetup.h"
+#include "System/TdfParser.h"
+#include "System/FileSystem/ArchiveScanner.h"
+#include "Map/MapParser.h"
+#include "Sim/Misc/GlobalConstants.h"
+#include "System/UnsyncedRNG.h"
+#include "System/Exceptions.h"
+#include "System/Util.h"
+#include "System/Log/ILog.h"
 
 #include <algorithm>
 #include <map>
@@ -8,20 +19,6 @@
 #include <cstring>
 #include <boost/format.hpp>
 
-#include "mmgr.h"
-
-#include "GameSetup.h"
-#include "TdfParser.h"
-#include "FileSystem/ArchiveScanner.h"
-#include "Map/MapParser.h"
-#include "Sim/Misc/GlobalConstants.h"
-#include "UnsyncedRNG.h"
-#include "Exceptions.h"
-#include "Util.h"
-#include "LogOutput.h"
-
-
-using namespace std;
 
 const CGameSetup* gameSetup = NULL;
 
@@ -40,7 +37,7 @@ CGameSetup::CGameSetup()
 	, hostDemo(false)
 	, numDemoPlayers(0)
 	, gameStartDelay(0)
-	, noHelperAIs(0)
+	, noHelperAIs(false)
 {}
 
 CGameSetup::~CGameSetup()
@@ -70,7 +67,7 @@ void CGameSetup::LoadStartPositionsFromMap()
 	if (!mapParser.IsValid()) {
 		throw content_error("MapInfo: " + mapParser.GetErrorLog());
 	}
-	
+
 	for(size_t a = 0; a < teamStartingData.size(); ++a) {
 		float3 pos(1000.0f, 100.0f, 1000.0f);
 		if (!mapParser.GetStartPos(teamStartingData[a].teamStartNum, pos)) // don't fail when playing with more players than startpositions and we didn't use them anyway
@@ -156,8 +153,11 @@ void CGameSetup::LoadPlayers(const TdfParser& file, std::set<std::string>& nameL
 	}
 
 	unsigned playerCount = 0;
-	if (file.GetValue(playerCount, "GAME\\NumPlayers") && playerStartingData.size() != playerCount)
-		logOutput.Print("Warning: "_STPF_" players in GameSetup script (NumPlayers says %i)", playerStartingData.size(), playerCount);
+	if (file.GetValue(playerCount, "GAME\\NumPlayers") && playerStartingData.size() != playerCount) {
+		LOG_L(L_WARNING,
+				_STPF_" players in GameSetup script (NumPlayers says %i)",
+				playerStartingData.size(), playerCount);
+	}
 }
 
 void CGameSetup::LoadSkirmishAIs(const TdfParser& file, std::set<std::string>& nameList)
@@ -259,8 +259,11 @@ void CGameSetup::LoadTeams(const TdfParser& file)
 	}
 
 	unsigned teamCount = 0;
-	if (file.GetValue(teamCount, "Game\\NumTeams") && teamStartingData.size() != teamCount)
-		logOutput.Print("Warning: "_STPF_" teams in GameSetup script (NumTeams: %i)", teamStartingData.size(), teamCount);
+	if (file.GetValue(teamCount, "Game\\NumTeams") && teamStartingData.size() != teamCount) {
+		LOG_L(L_WARNING,
+				_STPF_" teams in GameSetup script (NumTeams: %i)",
+				teamStartingData.size(), teamCount);
+	}
 }
 
 void CGameSetup::LoadAllyTeams(const TdfParser& file)
@@ -305,10 +308,11 @@ void CGameSetup::LoadAllyTeams(const TdfParser& file)
 	}
 
 	unsigned allyCount = 0;
-	if (!file.GetValue(allyCount, "GAME\\NumAllyTeams") || allyStartingData.size() == allyCount)
+	if (!file.GetValue(allyCount, "GAME\\NumAllyTeams") || (allyStartingData.size() == allyCount)) {
 		;
-	else
-		logOutput.Print("Warning: incorrect number of allyteams in GameSetup script");
+	} else {
+		LOG_L(L_WARNING, "Incorrect number of allyteams in GameSetup script");
+	}
 }
 
 void CGameSetup::RemapPlayers()

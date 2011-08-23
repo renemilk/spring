@@ -1,18 +1,17 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "SmokeProjectile2.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
 #include "Sim/Misc/Wind.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CSmokeProjectile2, CProjectile, );
 
@@ -55,7 +54,7 @@ void CSmokeProjectile2::Init(const float3& pos, CUnit* owner)
 {
 	textureNum = (int) (gu->usRandInt() % projectileDrawer->smoketex.size());
 
-	if (pos.y - ground->GetApproximateHeight(pos.x, pos.z) > 10) {
+	if (pos.y - ground->GetApproximateHeight(pos.x, pos.z, false) > 10) {
 		useAirLos = true;
 	}
 
@@ -68,7 +67,15 @@ void CSmokeProjectile2::Init(const float3& pos, CUnit* owner)
 	CProjectile::Init(pos, owner);
 }
 
-CSmokeProjectile2::CSmokeProjectile2(const float3& pos, const float3& wantedPos, const float3& speed, float ttl, float startSize, float sizeExpansion, CUnit* owner, float color)
+CSmokeProjectile2::CSmokeProjectile2(
+	const float3& pos,
+	const float3& wantedPos,
+	const float3& speed,
+	float ttl,
+	float startSize,
+	float sizeExpansion,
+	CUnit* owner,
+	float color)
 : CProjectile(pos, speed, owner, false, false, false),
 	color(color),
 	age(0),
@@ -80,17 +87,14 @@ CSmokeProjectile2::CSmokeProjectile2(const float3& pos, const float3& wantedPos,
 	ageSpeed = 1 / ttl;
 	checkCol = false;
 	castShadow = true;
-	if ((pos.y - ground->GetApproximateHeight(pos.x, pos.z)) > 10) {
+	if ((pos.y - ground->GetApproximateHeight(pos.x, pos.z, false)) > 10) {
 		useAirLos = true;
 	}
 	glowFalloff = 4.5f + gu->usRandFloat() * 6;
 	textureNum = (int)(gu->usRandInt() % projectileDrawer->smoketex.size());
 }
 
-CSmokeProjectile2::~CSmokeProjectile2()
-{
 
-}
 
 void CSmokeProjectile2::Update()
 {
@@ -129,10 +133,6 @@ void CSmokeProjectile2::Draw()
 	col[1] = (unsigned char) (color * alpha + gglow);
 	col[2] = (unsigned char) std::max(0.f, color * alpha - gglow * 0.5f);
 	col[3] = alpha/*-alphaFalloff*globalRendering->timeOffset*/;
-	//int frame=textureNum;
-	//float xmod=0.125f+(float(int(frame%6)))/16.0f;
-	//float ymod=(int(frame/6))/16.0f;
-	//int smokenum = frame%12;
 
 	const float3 interPos = pos + (wantedPos + speed * globalRendering->timeOffset - pos) * 0.1f * globalRendering->timeOffset;
 	const float interSize = size + sizeExpansion * globalRendering->timeOffset;

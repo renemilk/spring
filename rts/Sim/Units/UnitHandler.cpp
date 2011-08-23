@@ -1,8 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <cassert>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "lib/gml/gml.h"
 #include "UnitHandler.h"
@@ -11,7 +10,7 @@
 #include "CommandAI/BuilderCAI.h"
 #include "CommandAI/Command.h"
 #include "Game/GameSetup.h"
-#include "Lua/LuaUnsyncedCtrl.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/Ground.h"
 #include "Map/ReadMap.h"
 #include "Sim/Features/Feature.h"
@@ -23,16 +22,13 @@
 #include "Sim/MoveTypes/MoveType.h"
 #include "System/EventHandler.h"
 #include "System/EventBatchHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/TimeProfiler.h"
 #include "System/myMath.h"
 #include "System/Sync/SyncTracer.h"
 #include "System/creg/STL_Deque.h"
 #include "System/creg/STL_List.h"
 #include "System/creg/STL_Set.h"
-using std::min;
-using std::max;
 
 
 //////////////////////////////////////////////////////////////////////
@@ -161,16 +157,9 @@ void CUnitHandler::DeleteUnit(CUnit* unit)
 
 void CUnitHandler::DeleteUnitNow(CUnit* delUnit)
 {
-#if defined(USE_GML) && GML_ENABLE_SIM
-	{
-		GML_STDMUTEX_LOCK(dque); // DeleteUnitNow
-
-		LuaUnsyncedCtrl::drawCmdQueueUnits.erase(delUnit);
-	}
-#endif
-	
 	int delTeam = 0;
 	int delType = 0;
+
 	std::list<CUnit*>::iterator usi;
 	for (usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
 		if (*usi == delUnit) {
@@ -180,12 +169,17 @@ void CUnitHandler::DeleteUnitNow(CUnit* delUnit)
 			delTeam = delUnit->team;
 			delType = delUnit->unitDef->id;
 
+			#if defined(USE_GML) && GML_ENABLE_SIM
+			GML_STDMUTEX_LOCK(dque); // DeleteUnitNow
+			#endif
+
 			activeUnits.erase(usi);
 			units[delUnit->id] = 0;
 			freeUnitIDs.push_back(delUnit->id);
 			teamHandler->Team(delTeam)->RemoveUnit(delUnit, CTeam::RemoveDied);
 
 			unitsByDefs[delTeam][delType].erase(delUnit);
+
 			delete delUnit;
 			break;
 		}
@@ -194,7 +188,7 @@ void CUnitHandler::DeleteUnitNow(CUnit* delUnit)
 #ifdef _DEBUG
 	for (usi = activeUnits.begin(); usi != activeUnits.end(); /* no post-op */) {
 		if (*usi == delUnit) {
-			logOutput.Print("Error: Duplicated unit found in active units on erase");
+			LOG_L(L_ERROR, "Duplicated unit found in active units on erase");
 			usi = activeUnits.erase(usi);
 		} else {
 			++usi;
@@ -219,7 +213,6 @@ void CUnitHandler::Update()
 			eventHandler.DeleteSyncedUnits();
 
 			GML_RECMUTEX_LOCK(proj); // Update - projectile drawing may access owner() and lead to crash
-
 			GML_RECMUTEX_LOCK(sel);  // Update - unit is removed from selectedUnits in ~CObject, which is too late.
 			GML_RECMUTEX_LOCK(quad); // Update - make sure unit does not get partially deleted before before being removed from the quadfield
 
@@ -236,6 +229,29 @@ void CUnitHandler::Update()
 
 	GML_UPDATE_TICKS();
 
+	#define VECTOR_SANITY_CHECK(v)                              \
+		assert(!math::isnan(v.x) && !math::isinf(v.x)); \
+		assert(!math::isnan(v.y) && !math::isinf(v.y)); \
+		assert(!math::isnan(v.z) && !math::isinf(v.z));
+	#define MAPPOS_SANITY_CHECK(unit)                          \
+		if (unit->unitDef->IsGroundUnit()) {                   \
+			assert(unit->pos.x >= -(float3::maxxpos * 16.0f)); \
+			assert(unit->pos.x <=  (float3::maxxpos * 16.0f)); \
+			assert(unit->pos.z >= -(float3::maxzpos * 16.0f)); \
+			assert(unit->pos.z <=  (float3::maxzpos * 16.0f)); \
+		}
+	#define UNIT_SANITY_CHECK(unit)                 \
+		VECTOR_SANITY_CHECK(unit->pos);             \
+		VECTOR_SANITY_CHECK(unit->midPos);          \
+		VECTOR_SANITY_CHECK(unit->relMidPos);       \
+		VECTOR_SANITY_CHECK(unit->speed);           \
+		VECTOR_SANITY_CHECK(unit->deathSpeed);      \
+		VECTOR_SANITY_CHECK(unit->residualImpulse); \
+		VECTOR_SANITY_CHECK(unit->rightdir);        \
+		VECTOR_SANITY_CHECK(unit->updir);           \
+		VECTOR_SANITY_CHECK(unit->frontdir);        \
+		MAPPOS_SANITY_CHECK(unit);
+
 	{
 		SCOPED_TIMER("Unit::MoveType::Update");
 		std::list<CUnit*>::iterator usi;
@@ -243,10 +259,18 @@ void CUnitHandler::Update()
 			CUnit* unit = *usi;
 			AMoveType* moveType = unit->moveType;
 
+			UNIT_SANITY_CHECK(unit);
+
 			if (moveType->Update()) {
 				eventHandler.UnitMoved(unit);
 			}
+			if (!unit->pos.IsInBounds() && (unit->speed.SqLength() > (MAX_UNIT_SPEED * MAX_UNIT_SPEED))) {
+				// this unit is not coming back, kill it now without any death
+				// sequence (so deathScriptFinished becomes true immediately)
+				unit->KillUnit(false, true, NULL, false);
+			}
 
+			UNIT_SANITY_CHECK(unit);
 			GML_GET_TICKS(unit->lastUnitUpdate);
 		}
 	}
@@ -256,6 +280,8 @@ void CUnitHandler::Update()
 		std::list<CUnit*>::iterator usi;
 		for (usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
 			CUnit* unit = *usi;
+
+			UNIT_SANITY_CHECK(unit);
 
 			if (unit->deathScriptFinished) {
 				// there are many ways to fiddle with "deathScriptFinished", so a unit may
@@ -268,67 +294,99 @@ void CUnitHandler::Update()
 			} else {
 				unit->Update();
 			}
+
+			UNIT_SANITY_CHECK(unit);
 		}
 	}
 
 	{
 		SCOPED_TIMER("Unit::SlowUpdate");
-		if (!(gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1))) {
+
+		// reset the iterator every <UNIT_SLOWUPDATE_RATE> frames
+		if ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) {
 			slowUpdateIterator = activeUnits.begin();
 		}
 
+		// stagger the SlowUpdate's
 		int n = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
-		for (; slowUpdateIterator != activeUnits.end() && n != 0; ++ slowUpdateIterator) {
-			(*slowUpdateIterator)->SlowUpdate(); n--;
+
+		for (; slowUpdateIterator != activeUnits.end() && n != 0; ++slowUpdateIterator) {
+			CUnit* unit = *slowUpdateIterator;
+
+			UNIT_SANITY_CHECK(unit);
+			unit->SlowUpdate();
+			UNIT_SANITY_CHECK(unit);
+
+			n--;
 		}
-	} // for timer destruction
+	}
 }
 
 
-float CUnitHandler::GetBuildHeight(const float3& pos, const UnitDef* unitdef)
+
+
+// find the reference height for a build-position
+// against which to compare all footprint squares
+float CUnitHandler::GetBuildHeight(const float3& pos, const UnitDef* unitdef, bool synced)
 {
-	float minh = -5000.0f;
-	float maxh =  5000.0f;
-	int numBorder=0;
-	float borderh=0;
-	const float* heightmap=readmap->GetHeightmap();
+	const float* orgHeightMap = readmap->GetOriginalHeightMapSynced();
+	const float* curHeightMap = readmap->GetCornerHeightMapSynced();
 
-	int xsize=1;
-	int zsize=1;
+	#ifdef USE_UNSYNCED_HEIGHTMAP
+	if (!synced) {
+		orgHeightMap = readmap->GetCornerHeightMapUnsynced();
+		curHeightMap = readmap->GetCornerHeightMapUnsynced();
+	}
+	#endif
 
-	float maxDif=unitdef->maxHeightDif;
-	int x1 = (int)max(0.f,(pos.x-(xsize*0.5f*SQUARE_SIZE))/SQUARE_SIZE);
-	int x2 = min(gs->mapx,x1+xsize);
-	int z1 = (int)max(0.f,(pos.z-(zsize*0.5f*SQUARE_SIZE))/SQUARE_SIZE);
-	int z2 = min(gs->mapy,z1+zsize);
+	const float difH = unitdef->maxHeightDif;
 
-	if (x1 > gs->mapx) x1 = gs->mapx;
-	if (x2 < 0) x2 = 0;
-	if (z1 > gs->mapy) z1 = gs->mapy;
-	if (z2 < 0) z2 = 0;
+	float minH = readmap->currMinHeight;
+	float maxH = readmap->currMaxHeight;
 
-	for(int x=x1; x<=x2; x++){
-		for(int z=z1; z<=z2; z++){
-			float orgh=readmap->orgheightmap[z*(gs->mapx+1)+x];
-			float h=heightmap[z*(gs->mapx+1)+x];
-			if(x==x1 || x==x2 || z==z1 || z==z2){
-				numBorder++;
-				borderh+=h;
+	unsigned int numBorderSquares = 0;
+	float sumBorderSquareHeight = 0.0f;
+
+	static const int xsize = 1;
+	static const int zsize = 1;
+
+	// top-left footprint corner (sans clamping)
+	const int px = (pos.x - (xsize * (SQUARE_SIZE >> 1))) / SQUARE_SIZE;
+	const int pz = (pos.z - (zsize * (SQUARE_SIZE >> 1))) / SQUARE_SIZE;
+	// top-left and bottom-right footprint corner (clamped)
+	const int x1 = std::min(gs->mapx, std::max(0, px));
+	const int z1 = std::min(gs->mapy, std::max(0, pz));
+	const int x2 = std::max(0, std::min(gs->mapx, x1 + xsize));
+	const int z2 = std::max(0, std::min(gs->mapy, z1 + zsize));
+
+	for (int x = x1; x <= x2; x++) {
+		for (int z = z1; z <= z2; z++) {
+			const float sqOrgH = orgHeightMap[z * gs->mapxp1 + x];
+			const float sqCurH = curHeightMap[z * gs->mapxp1 + x];
+			const float sqMinH = std::min(sqCurH, sqOrgH);
+			const float sqMaxH = std::max(sqCurH, sqOrgH);
+
+			if (x == x1 || x == x2 || z == z1 || z == z2) {
+				sumBorderSquareHeight += sqCurH;
+				numBorderSquares += 1;
 			}
-			if(minh<min(h,orgh)-maxDif)
-				minh=min(h,orgh)-maxDif;
-			if(maxh>max(h,orgh)+maxDif)
-				maxh=max(h,orgh)+maxDif;
+
+			// restrict the range of [minH, maxH] to
+			// the minimum and maximum square height
+			// within the footprint
+			if (minH < (sqMinH - difH)) { minH = sqMinH - difH; }
+			if (maxH > (sqMaxH + difH)) { maxH = sqMaxH + difH; }
 		}
 	}
-	float h=borderh/numBorder;
 
-	if(h<minh && minh<maxh)
-		h=minh+0.01f;
-	if(h>maxh && maxh>minh)
-		h=maxh-0.01f;
+	// find the average height of the footprint-border squares
+	const float avgH = sumBorderSquareHeight / numBorderSquares;
 
-	return h;
+	// and clamp it to [minH, maxH] if necessary
+	if (avgH < minH && minH < maxH) { return (minH + 0.01f); }
+	if (avgH > maxH && maxH > minH) { return (maxH - 0.01f); }
+
+	return avgH;
 }
 
 
@@ -336,6 +394,7 @@ int CUnitHandler::TestUnitBuildSquare(
 	const BuildInfo& buildInfo,
 	CFeature*& feature,
 	int allyteam,
+	bool synced,
 	std::vector<float3>* canbuildpos,
 	std::vector<float3>* featurepos,
 	std::vector<float3>* nobuildpos,
@@ -347,18 +406,19 @@ int CUnitHandler::TestUnitBuildSquare(
 	const int zsize = buildInfo.GetZSize();
 	const float3 pos = buildInfo.pos;
 
-	const int x1 = (int) (pos.x - (xsize * 0.5f * SQUARE_SIZE));
-	const int x2 = x1 + xsize * SQUARE_SIZE;
-	const int z1 = (int) (pos.z - (zsize * 0.5f * SQUARE_SIZE));
+	const int x1 = (pos.x - (xsize * 0.5f * SQUARE_SIZE));
+	const int z1 = (pos.z - (zsize * 0.5f * SQUARE_SIZE));
 	const int z2 = z1 + zsize * SQUARE_SIZE;
-	const float h = GetBuildHeight(pos, buildInfo.def);
+	const int x2 = x1 + xsize * SQUARE_SIZE;
+	const float bh = GetBuildHeight(pos, buildInfo.def, synced);
 
 	int canBuild = 2;
 
 	if (buildInfo.def->needGeo) {
 		canBuild = 0;
-		const std::vector<CFeature*> &features = qf->GetFeaturesExact(pos, max(xsize, zsize) * 6);
+		const std::vector<CFeature*>& features = qf->GetFeaturesExact(pos, std::max(xsize, zsize) * 6);
 
+		// look for a nearby geothermal feature if we need one
 		for (std::vector<CFeature*>::const_iterator fi = features.begin(); fi != features.end(); ++fi) {
 			if ((*fi)->def->geoThermal
 				&& fabs((*fi)->pos.x - pos.x) < (xsize * 4 - 4)
@@ -370,10 +430,12 @@ int CUnitHandler::TestUnitBuildSquare(
 	}
 
 	if (commands != NULL) {
-		//! unsynced code
+		//! this is only called in unsynced context (ShowUnitBuildSquare)
+		assert(!synced);
+
 		for (int x = x1; x < x2; x += SQUARE_SIZE) {
 			for (int z = z1; z < z2; z += SQUARE_SIZE) {
-				int tbs = TestBuildSquare(float3(x, pos.y, z), buildInfo.def, feature, gu->myAllyTeam);
+				int tbs = TestBuildSquare(float3(x, pos.y, z), buildInfo.def, feature, gu->myAllyTeam, synced);
 
 				if (tbs) {
 					std::vector<Command>::const_iterator ci = commands->begin();
@@ -388,25 +450,26 @@ int CUnitHandler::TestUnitBuildSquare(
 					}
 
 					if (!tbs) {
-						nobuildpos->push_back(float3(x, h, z));
+						nobuildpos->push_back(float3(x, bh, z));
 						canBuild = 0;
 					} else if (feature || tbs == 1) {
-						featurepos->push_back(float3(x, h, z));
+						featurepos->push_back(float3(x, bh, z));
 					} else {
-						canbuildpos->push_back(float3(x, h, z));
+						canbuildpos->push_back(float3(x, bh, z));
 					}
 
-					canBuild = min(canBuild, tbs);
+					canBuild = std::min(canBuild, tbs);
 				} else {
-					nobuildpos->push_back(float3(x, h, z));
+					nobuildpos->push_back(float3(x, bh, z));
 					canBuild = 0;
 				}
 			}
 		}
 	} else {
+		//! this can be called in either context
 		for (int x = x1; x < x2; x += SQUARE_SIZE) {
 			for (int z = z1; z < z2; z += SQUARE_SIZE) {
-				canBuild = min(canBuild, TestBuildSquare(float3(x, h, z), buildInfo.def, feature, allyteam));
+				canBuild = std::min(canBuild, TestBuildSquare(float3(x, bh, z), buildInfo.def, feature, allyteam, synced));
 
 				if (canBuild == 0) {
 					return 0;
@@ -419,7 +482,7 @@ int CUnitHandler::TestUnitBuildSquare(
 }
 
 
-int CUnitHandler::TestBuildSquare(const float3& pos, const UnitDef* unitdef, CFeature*& feature, int allyteam)
+int CUnitHandler::TestBuildSquare(const float3& pos, const UnitDef* unitdef, CFeature*& feature, int allyteam, bool synced)
 {
 	if (pos.x < 0 || pos.x >= gs->mapx * SQUARE_SIZE || pos.z < 0 || pos.z >= gs->mapy * SQUARE_SIZE) {
 		return 0;
@@ -449,20 +512,29 @@ int CUnitHandler::TestBuildSquare(const float3& pos, const UnitDef* unitdef, CFe
 		}
 	}
 
-	const float groundHeight = ground->GetHeightReal(pos.x, pos.z);
+	const float groundHeight = ground->GetHeightReal(pos.x, pos.z, synced);
 
 	if (!unitdef->floater || groundHeight > 0.0f) {
 		// if we are capable of floating, only test local
 		// height difference if terrain is above sea-level
-		const float* heightmap = readmap->GetHeightmap();
-		int x = (int) (pos.x / SQUARE_SIZE);
-		int z = (int) (pos.z / SQUARE_SIZE);
-		float orgh = readmap->orgheightmap[z * (gs->mapx + 1) + x];
-		float h = heightmap[z * (gs->mapx + 1) + x];
-		float hdif = unitdef->maxHeightDif;
+		const float* orgHeightMap = readmap->GetOriginalHeightMapSynced();
+		const float* curHeightMap = readmap->GetCornerHeightMapSynced();
 
-		if (pos.y > orgh + hdif && pos.y > h + hdif) { return 0; }
-		if (pos.y < orgh - hdif && pos.y < h - hdif) { return 0; }
+		#ifdef USE_UNSYNCED_HEIGHTMAP
+		if (!synced) {
+			orgHeightMap = readmap->GetCornerHeightMapUnsynced();
+			curHeightMap = readmap->GetCornerHeightMapUnsynced();
+		}
+		#endif
+
+		const int sqx = pos.x / SQUARE_SIZE;
+		const int sqz = pos.z / SQUARE_SIZE;
+		const float orgH = orgHeightMap[sqz * gs->mapxp1 + sqx];
+		const float curH = curHeightMap[sqz * gs->mapxp1 + sqx];
+		const float difH = unitdef->maxHeightDif;
+
+		if (pos.y > std::max(orgH + difH, curH + difH)) { return 0; }
+		if (pos.y < std::min(orgH - difH, curH - difH)) { return 0; }
 	}
 
 	if (!unitdef->IsAllowedTerrainHeight(groundHeight))

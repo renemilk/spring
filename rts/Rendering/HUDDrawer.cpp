@@ -1,8 +1,8 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/StdAfx.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/PlayerHandler.h"
 #include "Rendering/glFont.h"
 #include "Rendering/HUDDrawer.h"
@@ -14,7 +14,6 @@
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDef.h"
 #include "Sim/Misc/GlobalSynced.h"
-#include "System/GlobalUnsynced.h"
 #include "System/myMath.h"
 
 HUDDrawer* HUDDrawer::GetInstance()

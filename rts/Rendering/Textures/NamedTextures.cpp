@@ -1,15 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "NamedTextures.h"
 
 #include "Rendering/GL/myGL.h"
-#include "bitops.h"
 #include "Bitmap.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/GlobalUnsynced.h"
+#include "System/bitops.h"
 #include "System/TimeProfiler.h"
 #include "System/Vec2.h"
 
@@ -27,6 +25,8 @@ void CNamedTextures::Init()
 
 void CNamedTextures::Kill()
 {
+	GML_STDMUTEX_LOCK(ntex); // Kill
+
 	map<string, TexInfo>::iterator it;
 	for (it = texMap.begin(); it != texMap.end(); ++it) {
 		const GLuint texID = it->second.id;
@@ -42,6 +42,8 @@ bool CNamedTextures::Bind(const string& texName)
 	if (texName.empty()) {
 		return false;
 	}
+
+	GML_STDMUTEX_LOCK(ntex); // Bind
 
 	map<string, TexInfo>::iterator it = texMap.find(texName);
 	if (it != texMap.end()) {
@@ -245,6 +247,8 @@ bool CNamedTextures::Load(const string& texName, unsigned int texID)
 
 void CNamedTextures::Update()
 {
+	GML_STDMUTEX_LOCK(ntex); // Update
+
 	if (texWaiting.empty()) {
 		return;
 	}
@@ -265,6 +269,9 @@ bool CNamedTextures::Free(const string& texName)
 	if (texName.empty()) {
 		return false;
 	}
+
+	GML_STDMUTEX_LOCK(ntex); // Free
+
 	map<string, TexInfo>::iterator it = texMap.find(texName);
 	if (it != texMap.end()) {
 		const GLuint texID = it->second.id;
@@ -281,6 +288,9 @@ const CNamedTextures::TexInfo* CNamedTextures::GetInfo(const string& texName)
 	if (texName.empty()) {
 		return false;
 	}
+
+	GML_STDMUTEX_LOCK(ntex); // GetInfo
+
 	map<string, TexInfo>::const_iterator it = texMap.find(texName);
 	if (it != texMap.end()) {
 		return &it->second;

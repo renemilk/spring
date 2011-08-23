@@ -1,22 +1,26 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include <SDL_keysym.h>
 #include <boost/cstdint.hpp>
 
 #include "OverheadController.h"
 
-#include "ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "Game/Camera.h"
 #include "Game/CameraHandler.h"
 #include "Game/UI/MouseHandler.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/myMath.h"
 #include "System/Input/KeyInput.h"
+
+CONFIG(float, MiddleClickScrollSpeed).defaultValue(0.01f);
+CONFIG(int, OverheadScrollSpeed).defaultValue(10);
+CONFIG(float, OverheadTiltSpeed).defaultValue(1.0f);
+CONFIG(bool, OverheadEnabled).defaultValue(true);
+CONFIG(float, OverheadFOV).defaultValue(45.0f);
 
 COverheadController::COverheadController()
 	: flipped(false)
@@ -26,11 +30,11 @@ COverheadController::COverheadController()
 	, changeAltHeight(true)
 	, maxHeight(10000)
 {
-	middleClickScrollSpeed = configHandler->Get("MiddleClickScrollSpeed", 0.01f);
-	scrollSpeed = configHandler->Get("OverheadScrollSpeed",10)*0.1f;
-	tiltSpeed = configHandler->Get("OverheadTiltSpeed",1.0f);
-	enabled = !!configHandler->Get("OverheadEnabled",1);
-	fov = configHandler->Get("OverheadFOV", 45.0f);
+	middleClickScrollSpeed = configHandler->GetFloat("MiddleClickScrollSpeed");
+	scrollSpeed = configHandler->GetInt("OverheadScrollSpeed")*0.1f;
+	tiltSpeed = configHandler->GetFloat("OverheadTiltSpeed");
+	enabled = configHandler->GetBool("OverheadEnabled");
+	fov = configHandler->GetFloat("OverheadFOV");
 }
 
 void COverheadController::KeyMove(float3 move)
@@ -80,7 +84,7 @@ void COverheadController::MouseWheelMove(float move)
 				dif = (height - oldAltHeight) / mouse->dir.y * dir.y;
 			}
 			float3 wantedPos = cpos + mouse->dir * dif;
-			float newHeight = ground->LineGroundCol(wantedPos, wantedPos + dir * 15000);
+			float newHeight = ground->LineGroundCol(wantedPos, wantedPos + dir * 15000, false);
 			if (newHeight < 0) {
 				newHeight = height* (1.0f + move * 0.007f * (keyInput->IsKeyPressed(SDLK_LSHIFT) ? 3:1));
 			}
@@ -128,7 +132,7 @@ float3 COverheadController::GetPos()
 	pos.z = Clamp(pos.z, 0.01f, gs->mapy * SQUARE_SIZE - 0.01f);
 	height = Clamp(height, 60.0f, maxHeight);
 
-	pos.y = ground->GetHeightAboveWater(pos.x,pos.z);
+	pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false);
 	dir = float3(0.0f, -1.0f, flipped ? zscale : -zscale).ANormalize();
 
 	float3 cpos = pos - dir * height;
@@ -147,8 +151,9 @@ float3 COverheadController::SwitchFrom() const
 
 void COverheadController::SwitchTo(bool showText)
 {
-	if(showText)
-		logOutput.Print("Switching to Overhead (TA) style camera");
+	if (showText) {
+		LOG("Switching to Overhead (TA) style camera");
+	}
 }
 
 void COverheadController::GetState(StateMap& sm) const

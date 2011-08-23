@@ -9,8 +9,8 @@
 #include <stack>
 #include "lib/gml/ThreadSafeContainers.h"
 
-#include "MemPool.h"
-#include "float3.h"
+#include "System/MemPool.h"
+#include "System/float3.h"
 
 #define UNSYNCED_PROJ_NOEVENT 1 // bypass id and event handling for unsynced projectiles (faster)
 
@@ -26,10 +26,13 @@ struct SS3OVertex;
 struct piececmp {
 	bool operator() (const FlyingPiece* fp1, const FlyingPiece* fp2) const;
 };
+struct projdetach {
+	static void Detach(CProjectile *p);
+};
 
 typedef std::pair<CProjectile*, int> ProjectileMapPair;
 typedef std::map<int, ProjectileMapPair> ProjectileMap;
-typedef ThreadListSim<std::list<CProjectile*>, std::set<CProjectile*>, CProjectile*> ProjectileContainer;
+typedef ThreadListSim<std::list<CProjectile*>, std::set<CProjectile*>, CProjectile*, projdetach> ProjectileContainer;
 typedef ThreadListSimRender<std::list<CGroundFlash*>, std::set<CGroundFlash*>, CGroundFlash*> GroundFlashContainer;
 #if defined(USE_GML) && GML_ENABLE_SIM
 typedef ThreadListSimRender<std::set<FlyingPiece*>, std::set<FlyingPiece*, piececmp>, FlyingPiece*> FlyingPieceContainer;
@@ -75,6 +78,10 @@ public:
 
 	void Update();
 	void UpdateProjectileContainer(ProjectileContainer&, bool);
+	void UpdateParticleSaturation() {
+		particleSaturation     = (maxParticles     > 0)? (currentParticles     / float(maxParticles    )): 1.0f;
+		nanoParticleSaturation = (maxNanoParticles > 0)? (currentNanoParticles / float(maxNanoParticles)): 1.0f;
+	}
 	
 	void AddProjectile(CProjectile* p);
 	void AddGroundFlash(CGroundFlash* flash);

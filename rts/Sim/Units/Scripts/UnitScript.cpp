@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 /* heavily based on CobInstance.cpp */
-#include "StdAfx.h"
 #include "UnitScript.h"
 
 #include "CobDefines.h"
@@ -14,11 +13,12 @@
 #include <SDL_timer.h>
 
 #include "Game/GameHelper.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/Ground.h"
 #include "Sim/Misc/GroundBlockingObjectMap.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/TeamHandler.h"
-#include "Sim/MoveTypes/AirMoveType.h"
+#include "Sim/MoveTypes/AAirMoveType.h"
 #include "Sim/MoveTypes/GroundMoveType.h"
 #include "Sim/MoveTypes/MoveType.h"
 #include "Sim/Projectiles/ExplosionGenerator.h"
@@ -39,10 +39,9 @@
 #include "Sim/Weapons/PlasmaRepulser.h"
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDef.h"
-#include "System/GlobalUnsynced.h"
 #include "System/FastMath.h"
 #include "System/myMath.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Util.h"
 #include "System/Sound/SoundChannels.h"
 #include "System/Sync/SyncTracer.h"
@@ -84,15 +83,20 @@ CUnitScript::CUnitScript(CUnit* unit, const std::vector<LocalModelPiece*>& piece
 
 CUnitScript::~CUnitScript()
 {
-	for (std::list<struct AnimInfo *>::iterator i = anims.begin(); i != anims.end(); ++i) {
-		// anim listeners are not owned by the anim in general, so don't delete them here
-		delete *i;
+	bool haveAnimations = false;
+
+	for (int animType = ATurn; animType <= AMove; animType++) {
+		for (std::list<AnimInfo*>::iterator i = anims[animType].begin(); i != anims[animType].end(); ++i) {
+			// anim listeners are not owned by the anim in general, so don't delete them here
+			delete *i;
+		}
+
+		haveAnimations = (haveAnimations || !anims[animType].empty());
 	}
 
 	// Remove us from possible animation ticking
-	if (!anims.empty()) {
+	if (haveAnimations)
 		GUnitScriptEngine.RemoveInstance(this);
-	}
 }
 
 
@@ -103,7 +107,7 @@ CUnitScript::~CUnitScript()
  * @brief Unblocks all threads waiting on an animation
  * @param anim AnimInfo the corresponding animation
  */
-void CUnitScript::UnblockAll(struct AnimInfo * anim)
+void CUnitScript::UnblockAll(AnimInfo* anim)
 {
 	std::list<IAnimListener *>::iterator li;
 
@@ -124,12 +128,12 @@ bool CUnitScript::MoveToward(float &cur, float dest, float speed)
 {
 	const float delta = dest - cur;
 
-	if (streflop::fabsf(delta) <= speed) {
+	if (math::fabsf(delta) <= speed) {
 		cur = dest;
 		return true;
 	}
 
-	if (delta>0.0f) {
+	if (delta > 0.0f) {
 		cur += speed;
 	} else {
 		cur -= speed;
@@ -151,18 +155,18 @@ bool CUnitScript::TurnToward(float &cur, float dest, float speed)
 	float delta = dest - cur;
 
 	// clamp: -pi .. 0 .. +pi (remainder(x,TWOPI) would do the same but is slower due to streflop)
-	if (delta>PI) {
+	if (delta > PI) {
 		delta -= TWOPI;
 	} else if (delta<=-PI) {
 		delta += TWOPI;
 	}
 
-	if (streflop::fabsf(delta) <= speed) {
+	if (math::fabsf(delta) <= speed) {
 		cur = dest;
 		return true;
 	}
 
-	if (delta>0.0f) {
+	if (delta > 0.0f) {
 		cur += speed;
 	} else {
 		cur -= speed;
@@ -188,17 +192,17 @@ bool CUnitScript::DoSpin(float &cur, float dest, float &speed, float accel, int 
 
 	// Check if we are not at the final speed and
 	// make sure we dont go past desired speed
-	if (streflop::fabsf(delta) <= accel) {
+	if (math::fabsf(delta) <= accel) {
 		speed = dest;
 		if (speed == 0.0f)
 			return true;
 	}
 	else {
 		if (delta > 0.0f) {
-			//TA obviously defines accelerations in speed/frame (at 30 fps)
-			speed += accel * (30.0f / divisor);
+			// accelerations are defined in speed/frame (at GAME_SPEED fps)
+			speed += accel * (float(GAME_SPEED) / divisor);
 		} else {
-			speed -= accel * (30.0f / divisor);
+			speed -= accel * (float(GAME_SPEED) / divisor);
 		}
 	}
 
@@ -209,99 +213,121 @@ bool CUnitScript::DoSpin(float &cur, float dest, float &speed, float accel, int 
 }
 
 
-/**
- * @brief Called by the engine when we are registered as animating. If we return -1 it means that
- *        there is no longer anything animating
- * @param deltaTime int delta time to update
- * @return 0 if there are still animations going, -1 else
- */
-int CUnitScript::Tick(int deltaTime)
-{
-	std::vector<struct AnimInfo *> remove;
 
-	for (std::list<struct AnimInfo *>::iterator it = anims.begin(); it != anims.end(); ) {
-		struct AnimInfo *ai = *it;
+void CUnitScript::TickAnims(int deltaTime, AnimType type, std::list< std::list<AnimInfo*>::iterator >& doneAnims) {
+	switch (type) {
+		case AMove: {
+			for (std::list<AnimInfo*>::iterator it = anims[type].begin(); it != anims[type].end(); ++it) {
+				AnimInfo* ai = *it;
 
-		bool done = false;
-
-		switch (ai->type) {
-			case AMove: {
+				// NOTE: we should not need to copy-and-set here, because
+				// MoveToward/TurnToward/DoSpin modify pos/rot by reference
 				float3 pos = pieces[ai->piece]->GetPosition();
-				done = MoveToward(pos[ai->axis], ai->dest, ai->speed / (1000 / deltaTime));
+
+				if (MoveToward(pos[ai->axis], ai->dest, ai->speed / (1000 / deltaTime))) {
+					ai->done = true; doneAnims.push_back(it);
+				}
+
 				pieces[ai->piece]->SetPosition(pos);
-			} break;
-			case ATurn: {
+			}
+		} break;
+
+		case ATurn: {
+			for (std::list<AnimInfo*>::iterator it = anims[type].begin(); it != anims[type].end(); ++it) {
+				AnimInfo* ai = *it;
 				float3 rot = pieces[ai->piece]->GetRotation();
-				done = TurnToward(rot[ai->axis], ai->dest, ai->speed / (1000 / deltaTime));
+
+				if (TurnToward(rot[ai->axis], ai->dest, ai->speed / (1000 / deltaTime))) {
+					ai->done = true; doneAnims.push_back(it);
+				}
+
 				pieces[ai->piece]->SetRotation(rot);
-			} break;
-			case ASpin: {
+			}
+		} break;
+
+		case ASpin: {
+			for (std::list<AnimInfo*>::iterator it = anims[type].begin(); it != anims[type].end(); ++it) {
+				AnimInfo* ai = *it;
 				float3 rot = pieces[ai->piece]->GetRotation();
-				done = DoSpin(rot[ai->axis], ai->dest, ai->speed, ai->accel, 1000 / deltaTime);
+
+				if (DoSpin(rot[ai->axis], ai->dest, ai->speed, ai->accel, 1000 / deltaTime)) {
+					ai->done = true; doneAnims.push_back(it);
+				}
+
 				pieces[ai->piece]->SetRotation(rot);
-			} break;
-		}
+			}
+		} break;
 
-		// Queue for removal (UnblockAll may add new anims)
-		if (done) {
-			remove.push_back(ai);
-		}
-		++it;
+		default: {
+		} break;
+	}
+}
+
+/**
+ * @brief Called by the engine when we are registered as animating.
+          If we return false there are no active animations left.
+ * @param deltaTime int delta time to update
+ * @return true if there are still active animations
+ */
+bool CUnitScript::Tick(int deltaTime)
+{
+	typedef std::list<AnimInfo*>::iterator AnimInfoIt;
+
+	// list of _iterators_ to finished animations,
+	// so we can get rid of them in constant time
+	std::list<AnimInfoIt> doneAnims;
+
+	for (int animType = ATurn; animType <= AMove; animType++) {
+		TickAnims(deltaTime, AnimType(animType), doneAnims);
 	}
 
-	//Tell listeners to unblock?
-	for (std::vector<struct AnimInfo *>::iterator it = remove.begin(); it != remove.end(); ++it) {
-		UnblockAll(*it); //! NOTE: UnblockAll might result in new anims being added
+	//! Tell listeners to unblock, and remove finished animations from the unit/script.
+	//! NOTE:
+	//!     removing a finished animation _must_ happen before notifying its listeners,
+	//!     otherwise the callback function (AnimFinished()) can call AddAnimListener()
+	//!     and append it to the listeners-list again (causing an endless loop)!
+	//! NOTE: UnblockAll might result in new anims being added
+	for (std::list<AnimInfoIt>::const_iterator it = doneAnims.begin(); it != doneAnims.end(); ++it) {
+		AnimInfoIt animInfoIt = *it;
+		AnimInfo* animInfo = *animInfoIt;
+
+		anims[animInfo->type].erase(animInfoIt);
+		UnblockAll(animInfo);
+		delete animInfo;
 	}
 
-	for (std::vector<struct AnimInfo *>::iterator it = remove.begin(); it != remove.end(); ++it) {
-		anims.remove(*it);
-		delete *it;
-	}
-
-	return anims.empty() ? -1 : 0;
+	return (HaveAnimations());
 }
 
 
-//Optimize this?
-//Returns anims list
-struct CUnitScript::AnimInfo *CUnitScript::FindAnim(AnimType type, int piece, int axis)
+
+std::list<CUnitScript::AnimInfo*>::iterator CUnitScript::FindAnim(AnimType type, int piece, int axis)
 {
-	for (std::list<struct AnimInfo *>::iterator i = anims.begin(); i != anims.end(); ++i) {
-		if (((*i)->type == type) && ((*i)->piece == piece) && ((*i)->axis == axis))
-			return *i;
+	for (std::list<AnimInfo*>::iterator i = anims[type].begin(); i != anims[type].end(); ++i) {
+		if (((*i)->piece == piece) && ((*i)->axis == axis))
+			return i;
 	}
-	return NULL;
+
+	return anims[type].end();
 }
 
-
-//Optimize this?
-// Returns true if an animation was found and deleted
-void CUnitScript::RemoveAnim(AnimType type, int piece, int axis)
+void CUnitScript::RemoveAnim(AnimType type, const std::list<AnimInfo*>::iterator& animInfoIt)
 {
-	struct AnimInfo *remove = NULL;
-
-	for (std::list<struct AnimInfo *>::iterator i = anims.begin(); i != anims.end(); ++i) {
-		struct AnimInfo *ai = *i;
-
-		if ((ai->type == type) && (ai->piece == piece) && (ai->axis == axis)) {
-			remove = ai;
-			break;
-		}
-	}
-
-	if (remove) {
-		// We need to unblock threads waiting on this animation, otherwise they will be lost in the void
-		UnblockAll(remove); //! NOTE: UnblockAll might result in new anims being added
-
-		anims.remove(remove);
-
-		delete remove;
-
+	if (animInfoIt != anims[type].end()) {
+		AnimInfo* ai = *animInfoIt;
+		anims[type].erase(animInfoIt);
+ 
 		// If this was the last animation, remove from currently animating list
-		if (anims.empty()) {
+		// FIXME: this could be done in a cleaner way
+		if (!HaveAnimations()) {
 			GUnitScriptEngine.RemoveInstance(this);
 		}
+
+		//! We need to unblock threads waiting on this animation, otherwise they will be lost in the void
+		//! NOTE: UnblockAll might result in new anims being added
+		UnblockAll(ai);
+
+		delete ai;
 	}
 }
 
@@ -309,14 +335,15 @@ void CUnitScript::RemoveAnim(AnimType type, int piece, int axis)
 //Overwrites old information. This means that threads blocking on turn completion
 //will now wait for this new turn instead. Not sure if this is the expected behaviour
 //Other option would be to kill them. Or perhaps unblock them.
-void CUnitScript::AddAnim(AnimType type, int piece, int axis, float speed, float dest, float accel, bool interpolated)
+void CUnitScript::AddAnim(AnimType type, int piece, int axis, float speed, float dest, float accel)
 {
 	if (!PieceExists(piece)) {
 		ShowScriptError("Invalid piecenumber");
 		return;
 	}
 
-	float destf;
+	float destf = 0.0f;
+
 	if (type == AMove) {
 		destf = pieces[piece]->original->offset[axis] + dest;
 	} else {
@@ -326,55 +353,78 @@ void CUnitScript::AddAnim(AnimType type, int piece, int axis, float speed, float
 		}
 	}
 
-	struct AnimInfo *ai;
+	std::list<AnimInfo*>::iterator animInfoIt;
+	AnimInfo* ai = NULL;
+	AnimType overrideType = ANone;
 
-	//Turns override spins.. Not sure about the other way around? If so the system should probably be redesigned
-	//to only have two types of anims.. turns and moves, with spin as a bool
-	//todo: optimize, atm RemoveAnim and FindAnim search twice through all anims
-	if (type == ATurn)
-		RemoveAnim(ASpin, piece, axis);
-	if (type == ASpin)
-		RemoveAnim(ATurn, piece, axis);
+	// first find an animation of a type we override
+	// Turns override spins.. Not sure about the other way around? If so
+	// the system should probably be redesigned to only have two types of
+	// anims (turns and moves), with spin as a bool
+	switch (type) {
+		case ATurn: {
+			overrideType = ASpin;
+			animInfoIt = FindAnim(overrideType, piece, axis);
+		} break;
+		case ASpin: {
+			overrideType = ATurn;
+			animInfoIt = FindAnim(overrideType, piece, axis);
+		} break;
+		case AMove: {
+			// ensure we never remove an animation of this type
+			overrideType = AMove;
+			animInfoIt = anims[overrideType].end();
+		} break;
+		default: {
+		} break;
+	}
 
-	ai = FindAnim(type, piece, axis);
-	if (!ai) {
+	if (animInfoIt != anims[overrideType].end())
+		RemoveAnim(overrideType, animInfoIt);
+
+	// now find an animation of our own type
+	animInfoIt = FindAnim(type, piece, axis);
+
+	if (animInfoIt == anims[type].end()) {
 		// If we were not animating before, inform the engine of this so it can schedule us
-		if (anims.empty()) {
+		// FIXME: this could be done in a cleaner way
+		if (!HaveAnimations()) {
 			GUnitScriptEngine.AddInstance(this);
 		}
 
-		ai = new struct AnimInfo;
+		ai = new AnimInfo();
 		ai->type = type;
 		ai->piece = piece;
 		ai->axis = axis;
-		anims.push_back(ai);
+		anims[type].push_back(ai);
+	} else {
+		ai = *animInfoIt;
 	}
 
 	ai->dest  = destf;
 	ai->speed = speed;
 	ai->accel = accel;
-	ai->interpolated = interpolated;
+	ai->done = false;
 }
 
 
 void CUnitScript::Spin(int piece, int axis, float speed, float accel)
 {
-	struct AnimInfo *ai;
-	ai = FindAnim(ASpin, piece, axis);
+	std::list<AnimInfo*>::iterator animInfoIt = FindAnim(ASpin, piece, axis);
 
 	//If we are already spinning, we may have to decelerate to the new speed
-	if (ai) {
+	if (animInfoIt != anims[ASpin].end()) {
+		AnimInfo* ai = *animInfoIt;
 		ai->dest = speed;
+
 		if (accel > 0) {
 			ai->accel = accel;
-		}
-		else {
+		} else {
 			//Go there instantly. Or have a defaul accel?
 			ai->speed = speed;
 			ai->accel = 0;
 		}
-	}
-	else {
+	} else {
 		//No accel means we start at desired speed instantly
 		if (accel <= 0)
 			AddAnim(ASpin, piece, axis, speed, speed, 0);
@@ -386,30 +436,30 @@ void CUnitScript::Spin(int piece, int axis, float speed, float accel)
 
 void CUnitScript::StopSpin(int piece, int axis, float decel)
 {
+	std::list<AnimInfo*>::iterator animInfoIt = FindAnim(ASpin, piece, axis);
+
 	if (decel <= 0) {
-		RemoveAnim(ASpin, piece, axis);
-	}
-	else {
-		struct AnimInfo *ai;
-		ai = FindAnim(ASpin, piece, axis);
-		if (!ai)
+		RemoveAnim(ASpin, animInfoIt);
+	} else {
+		if (animInfoIt == anims[ASpin].end())
 			return;
 
+		AnimInfo* ai = *animInfoIt;
 		ai->dest = 0;
 		ai->accel = decel;
 	}
 }
 
 
-void CUnitScript::Turn(int piece, int axis, float speed, float destination, bool interpolated)
+void CUnitScript::Turn(int piece, int axis, float speed, float destination)
 {
-	AddAnim(ATurn, piece, axis, speed, destination, 0, interpolated);
+	AddAnim(ATurn, piece, axis, speed, destination, 0);
 }
 
 
-void CUnitScript::Move(int piece, int axis, float speed, float destination, bool interpolated)
+void CUnitScript::Move(int piece, int axis, float speed, float destination)
 {
-	AddAnim(AMove, piece, axis, speed, destination, 0, interpolated);
+	AddAnim(AMove, piece, axis, speed, destination, 0);
 }
 
 
@@ -623,22 +673,24 @@ void CUnitScript::EmitSfx(int sfxType, int piece)
 					Channels::Battle.PlaySample(weaponDef->soundhit.getID(0), unit, weaponDef->soundhit.getVolume(0));
 				}
 
-				helper->Explosion(
+				CGameHelper::ExplosionParams params = {
 					pos,
+					ZeroVector,
 					weaponDef->damages,
+					weaponDef,
+					unit,                              // owner
+					NULL,                              // hitUnit
+					NULL,                              // hitFeature
 					weaponDef->areaOfEffect,
 					weaponDef->edgeEffectiveness,
 					weaponDef->explosionSpeed,
-					unit,
-					true,
-					1.0f,
-					weaponDef->noSelfDamage,
+					1.0f,                              // gfxMod
 					weaponDef->impactOnly,
-					weaponDef->explosionGenerator,
-					NULL,
-					ZeroVector,
-					weaponDef->id
-				);
+					weaponDef->noSelfDamage,           // ignoreOwner
+					true,                              // damageGround
+				};
+
+				helper->Explosion(params);
 			}
 		} break;
 	}
@@ -681,14 +733,29 @@ void CUnitScript::DropUnit(int u)
 //Returns true if there was an animation to listen to
 bool CUnitScript::AddAnimListener(AnimType type, int piece, int axis, IAnimListener *listener)
 {
-	struct AnimInfo *ai;
-	ai = FindAnim(type, piece, axis);
-	if (ai) {
-		ai->listeners.push_back(listener);
-		return true;
+	std::list<AnimInfo*>::iterator animInfoIt = FindAnim(type, piece, axis);
+
+	if (animInfoIt != anims[type].end()) {
+		AnimInfo* ai = *animInfoIt;
+
+		if (!ai->done) {
+			ai->listeners.push_back(listener);
+			return true;
+		}
+
+		// if the animation is already finished, listening for
+		// it just adds some overhead since either the current
+		// or the next Tick will remove it and call UnblockAll
+		// (which calls AnimFinished for each listener)
+		//
+		// we could notify the listener here, but a cleaner way
+		// is to treat the animation as if it did not exist and
+		// simply disregard the WaitFor* (no side-effects)
+		//
+		// listener->AnimFinished(ai->type, ai->piece, ai->axis);
 	}
-	else
-		return false;
+
+	return false;
 }
 
 
@@ -750,7 +817,7 @@ void CUnitScript::Explode(int piece, int flags)
 			if ((flags & PF_Fire) && ph->particleSaturation < 0.95f) { newflags |= PF_Fire; }
 			if (flags & PF_NoCEGTrail) { newflags |= PF_NoCEGTrail; }
 
-			//logOutput.Print("Exploding %s as %d", script.pieceNames[piece].c_str(), dl);
+			//LOG_L(L_DEBUG, "Exploding %s as %d", script.pieceNames[piece].c_str(), dl);
 			new CPieceProjectile(pos, speed, pieceData, newflags,unit,0.5f);
 		}
 	}
@@ -786,56 +853,6 @@ void CUnitScript::ShowFlare(int piece)
 
 	new CMuzzleFlame(pos, unit->speed, dir, size);
 #endif
-}
-
-
-void CUnitScript::MoveSmooth(int piece, int axis, float destination, int delta, int deltaTime)
-{
-	if (!PieceExists(piece)) {
-		ShowScriptError("Invalid piecenumber");
-		return;
-	}
-
-	//Make sure we do not overwrite animations of non-interpolated origin
-	AnimInfo *ai = FindAnim(AMove, piece, axis);
-	if (ai) {
-		if (!ai->interpolated) {
-			MoveNow(piece, axis, destination);
-			return;
-		}
-	}
-
-	float cur = pieces[piece]->GetPosition()[axis] - pieces[piece]->original->offset[axis];
-	float dist = streflop::fabsf(destination - cur);
-	int timeFactor = (1000 * 1000) / (deltaTime * deltaTime);
-	float speed = (dist * timeFactor) / delta;
-
-	Move(piece, axis, speed, destination, true);
-}
-
-
-void CUnitScript::TurnSmooth(int piece, int axis, float destination, int delta, int deltaTime)
-{
-	if (!PieceExists(piece)) {
-		ShowScriptError("Invalid piecenumber");
-		return;
-	}
-
-	AnimInfo *ai = FindAnim(ATurn, piece, axis);
-	if (ai) {
-		if (!ai->interpolated) {
-			TurnNow(piece, axis, destination);
-			return;
-		}
-	}
-
-	// not sure the ClampRad() call is necessary here
-	float cur = ClampRad(pieces[piece]->GetRotation()[axis]);
-	float dist = streflop::fabsf(destination - cur);
-	int timeFactor = (1000 * 1000) / (deltaTime * deltaTime);
-	float speed = (dist * timeFactor) / delta;
-
-	Turn(piece, axis, speed, destination, true);
 }
 
 
@@ -1022,7 +1039,7 @@ int CUnitScript::GetUnitVal(int val, int p1, int p2, int p3, int p4)
 	case POW:
 		return int(pow(((float)p1)/COBSCALE,((float)p2)/COBSCALE)*COBSCALE);
 	case PRINT:
-		logOutput.Print("Value 1: %d, 2: %d, 3: %d, 4: %d", p1, p2, p3, p4);
+		LOG("Value 1: %d, 2: %d, 3: %d, 4: %d", p1, p2, p3, p4);
 		break;
 	case HEADING: {
 		if (p1 <= 0) {
@@ -1202,11 +1219,11 @@ int CUnitScript::GetUnitVal(int val, int p1, int p2, int p3, int p4)
 	case ABS:
 		return abs(p1);
 	case KSIN:
-		return int(1024*streflop::sinf(TAANG2RAD*(float)p1));
+		return int(1024*math::sinf(TAANG2RAD*(float)p1));
 	case KCOS:
-		return int(1024*streflop::cosf(TAANG2RAD*(float)p1));
+		return int(1024*math::cosf(TAANG2RAD*(float)p1));
 	case KTAN:
-		return int(1024*streflop::tanf(TAANG2RAD*(float)p1));
+		return int(1024*math::tanf(TAANG2RAD*(float)p1));
 	case SQRT:
 		return int(math::sqrt((float)p1));
 	case FLANK_B_MODE:
@@ -1364,8 +1381,9 @@ int CUnitScript::GetUnitVal(int val, int p1, int p2, int p3, int p4)
 			return 0;
 		}
 		else {
-			logOutput.Print("CobError: Unknown get constant %d  (params = %d %d %d %d)",
-			                val, p1, p2, p3, p4);
+			LOG_L(L_ERROR,
+					"CobError: Unknown get constant %d (params = %d %d %d %d)",
+					val, p1, p2, p3, p4);
 		}
 	}
 #endif
@@ -1583,13 +1601,12 @@ void CUnitScript::SetUnitVal(int val, int param)
 			break;
 		}
 		case CRASHING: {
-			if (dynamic_cast<CAirMoveType*>(unit->moveType)) {
+			AAirMoveType* amt = dynamic_cast<AAirMoveType*>(unit->moveType);
+			if (amt != NULL) {
 				if (!!param) {
-					((CAirMoveType*)unit->moveType)->SetState(AAirMoveType::AIRCRAFT_CRASHING);
+					amt->SetState(AAirMoveType::AIRCRAFT_CRASHING);
 				} else {
-					unit->crashing = false;
-					((CAirMoveType*)unit->moveType)->aircraftState = AAirMoveType::AIRCRAFT_TAKEOFF;
-					((CAirMoveType*)unit->moveType)->SetState(AAirMoveType::AIRCRAFT_FLYING);
+					amt->SetState(AAirMoveType::AIRCRAFT_FLYING);
 				}
 			}
 			break;
@@ -1641,7 +1658,7 @@ void CUnitScript::SetUnitVal(int val, int param)
 				unitVars[val - UNIT_VAR_START] = param;
 			}
 			else {
-				logOutput.Print("CobError: Unknown set constant %d", val);
+				LOG_L(L_ERROR, "CobError: Unknown set constant %d", val);
 			}
 		}
 	}
@@ -1670,12 +1687,12 @@ void CUnitScript::BenchmarkScript(CUnitScript* script)
 		end = SDL_GetTicks();
 	}
 
-	logOutput.Print("%d0000 calls in %u ms -> %.0f calls/second",
-	                count, end - start, float(count) * (10000 / (duration / 1000)));
+	LOG("%d0000 calls in %u ms -> %.0f calls/second",
+			count, end - start, float(count) * (10000 / (duration / 1000)));
 }
 
 
-void CUnitScript::BenchmarkScript(const string& unitname)
+void CUnitScript::BenchmarkScript(const std::string& unitname)
 {
 	std::list<CUnit*>::iterator ui = uh->activeUnits.begin();
 	for (; ui != uh->activeUnits.end(); ++ui) {

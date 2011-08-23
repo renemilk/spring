@@ -8,7 +8,7 @@
 #include <assert.h>
 #include <vector>
 
-#include "creg/creg_cond.h"
+#include "System/creg/creg_cond.h"
 #include "Player.h"
 
 #define PATHING_FLAG 0xFFFFFFFF
@@ -28,7 +28,7 @@ public:
 
 	/**
 	 * @brief Player
-	 * @param i index to fetch
+	 * @param id index to fetch
 	 * @return CPlayer pointer
 	 *
 	 * Accesses a CPlayer instance at a given index

@@ -1,8 +1,10 @@
-#include "StdAfx.h"
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "ProjectileDrawer.hpp"
+
+#include "ProjectileDrawer.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/LoadScreen.h"
 #include "Lua/LuaParser.h"
 #include "Map/MapInfo.h"
@@ -10,11 +12,11 @@
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/ShadowHandler.h"
 #include "Rendering/UnitDrawer.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/GL/FBO.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/Textures/ColorMap.h"
 #include "Rendering/Textures/S3OTextureHandler.h"
@@ -26,15 +28,14 @@
 #include "Sim/Projectiles/Projectile.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
 #include "Sim/Projectiles/PieceProjectile.h"
-#include "Sim/Projectiles/Unsynced/FlyingPiece.hpp"
+#include "Sim/Projectiles/Unsynced/FlyingPiece.h"
 #include "Sim/Projectiles/Unsynced/ShieldPartProjectile.h"
 #include "Sim/Projectiles/WeaponProjectiles/WeaponProjectile.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
 #include "Sim/Weapons/WeaponDef.h"
 #include "System/EventHandler.h"
 #include "System/Exceptions.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Util.h"
 
 bool distcmp::operator() (const CProjectile* arg1, const CProjectile* arg2) const {
@@ -208,7 +209,7 @@ CProjectileDrawer::CProjectileDrawer(): CEventClient("[CProjectileDrawer]", 1234
 	}
 
 	if (!textureAtlas->Finalize()) {
-		logOutput.Print("Could not finalize projectile texture atlas. Use less/smaller textures.");
+		LOG_L(L_ERROR, "Could not finalize projectile texture atlas. Use less/smaller textures.");
 	}
 
 	flaretex        = textureAtlas->GetTexturePtr("flare");
@@ -277,7 +278,7 @@ CProjectileDrawer::CProjectileDrawer(): CEventClient("[CProjectileDrawer]", 1234
 	}
 
 	if (!groundFXAtlas->Finalize()) {
-		logOutput.Print("Could not finalize groundFX texture atlas. Use less/smaller textures.");
+		LOG_L(L_ERROR, "Could not finalize groundFX texture atlas. Use less/smaller textures.");
 	}
 
 	groundflashtex = groundFXAtlas->GetTexturePtr("groundflash");
@@ -487,7 +488,7 @@ void CProjectileDrawer::DrawProjectile(CProjectile* pro, bool drawReflection, bo
 			float dif = pro->pos.y - camera->pos.y;
 			float3 zeroPos = camera->pos * (pro->pos.y / dif) + pro->pos * (-camera->pos.y / dif);
 
-			if (ground->GetApproximateHeight(zeroPos.x, zeroPos.z) > 3 + 0.5f * pro->drawRadius) {
+			if (ground->GetApproximateHeight(zeroPos.x, zeroPos.z, false) > 3 + 0.5f * pro->drawRadius) {
 				return;
 			}
 		}
@@ -645,9 +646,9 @@ void CProjectileDrawer::Update() {
 void CProjectileDrawer::Draw(bool drawReflection, bool drawRefraction) {
 	glDisable(GL_BLEND);
 	glEnable(GL_TEXTURE_2D);
-	glDepthMask(1);
+	glDepthMask(GL_TRUE);
 
-	IBaseSky::SetFog();
+	ISky::SetupFog();
 
 	{
 		GML_STDMUTEX_LOCK(rpiece); // Draw
@@ -703,7 +704,7 @@ void CProjectileDrawer::Draw(bool drawReflection, bool drawRefraction) {
 		glColor4f(1.0f, 1.0f, 1.0f, 0.2f);
 		glAlphaFunc(GL_GREATER, 0.0f);
 		glEnable(GL_ALPHA_TEST);
-		glDepthMask(0);
+		glDepthMask(GL_FALSE);
 
 		// note: nano-particles (CGfxProjectile instances) also
 		// contribute to the count, but have their own creation
@@ -714,7 +715,7 @@ void CProjectileDrawer::Draw(bool drawReflection, bool drawRefraction) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDisable(GL_ALPHA_TEST);
 	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-	glDepthMask(1);
+	glDepthMask(GL_TRUE);
 
 	ph->currentParticles  = int(ph->currentParticles * 0.2f);
 	ph->currentParticles += int(0.2f * drawnPieces + 0.3f * numFlyingPieces);
@@ -725,8 +726,7 @@ void CProjectileDrawer::Draw(bool drawReflection, bool drawRefraction) {
 		ph->currentParticles += (modelRenderers[modelType]->GetNumProjectiles() * 0.8f);
 	}
 
-	ph->particleSaturation     = ph->currentParticles     / float(ph->maxParticles);
-	ph->nanoParticleSaturation = ph->currentNanoParticles / float(ph->maxNanoParticles);
+	ph->UpdateParticleSaturation();
 }
 
 void CProjectileDrawer::DrawShadowPass()
@@ -868,8 +868,6 @@ bool CProjectileDrawer::DrawProjectileModel(const CProjectile* p, bool shadowPas
 		if (pp->alphaThreshold != 0.1f) {
 			glPopAttrib();
 		}
-
-		*(pp->numCallback) = 0;
 	}
 
 	return true;
@@ -879,20 +877,17 @@ void CProjectileDrawer::DrawGroundFlashes()
 {
 	static const GLfloat black[] = {0.0f, 0.0f, 0.0f, 0.0f};
 
+	glDepthMask(GL_FALSE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 	glActiveTexture(GL_TEXTURE0);
 	groundFXAtlas->BindTexture();
 	glEnable(GL_TEXTURE_2D);
-	glDepthMask(GL_FALSE);
 	glEnable(GL_ALPHA_TEST);
 	glAlphaFunc(GL_GREATER, 0.01f);
 	glPolygonOffset(-20, -1000);
 	glEnable(GL_POLYGON_OFFSET_FILL);
 	glFogfv(GL_FOG_COLOR, black);
-
-	CGroundFlash::va = GetVertexArray();
-	CGroundFlash::va->Initialize();
 
 	{
 		GML_STDMUTEX_LOCK(rflash); // DrawGroundFlashes
@@ -901,26 +896,57 @@ void CProjectileDrawer::DrawGroundFlashes()
 		ph->groundFlashes.add_delayed();
 	}
 
-	CGroundFlash::va->EnlargeArrays(8 * ph->groundFlashes.render_size(), 0, VA_SIZE_TC);
+	CGroundFlash::va = GetVertexArray();
+	CGroundFlash::va->Initialize();
+	CGroundFlash::va->EnlargeArrays(8, 0, VA_SIZE_TC);
 
+	GroundFlashContainer& gfc = ph->groundFlashes;
 	GroundFlashContainer::render_iterator gfi;
-	for (gfi = ph->groundFlashes.render_begin(); gfi != ph->groundFlashes.render_end(); ++gfi) {
-		if (
-			((*gfi)->alwaysVisible || 
-				gu->spectatingFullView ||
-				loshandler->InAirLos((*gfi)->pos,gu->myAllyTeam)
-			) && camera->InView((*gfi)->pos, (*gfi)->size)
-		)
-			(*gfi)->Draw();
+
+	bool depthTest = true;
+	bool depthMask = false;
+
+	for (gfi = gfc.render_begin(); gfi != gfc.render_end(); ++gfi) {
+		CGroundFlash* gf = *gfi;
+
+		const bool los = gu->spectatingFullView || loshandler->InAirLos(gf->pos, gu->myAllyTeam);
+		const bool vis = camera->InView(gf->pos, gf->size);
+
+		if (depthTest != gf->depthTest) {
+			depthTest = gf->depthTest;
+
+			if (depthTest) {
+				glEnable(GL_DEPTH_TEST);
+			} else {
+				glDisable(GL_DEPTH_TEST);
+			}
+		}
+		if (depthMask != gf->depthMask) {
+			depthMask = gf->depthMask;
+
+			if (depthMask) {
+				glDepthMask(GL_TRUE);
+			} else {
+				glDepthMask(GL_FALSE);
+			}
+		}
+
+		if ((gf->alwaysVisible || los) && vis) {
+			gf->Draw();
+		}
+
+		CGroundFlash::va->DrawArrayTC(GL_QUADS);
+		CGroundFlash::va->Initialize();
 	}
 
-	CGroundFlash::va->DrawArrayTC(GL_QUADS);
 
 	glFogfv(GL_FOG_COLOR, mapInfo->atmosphere.fogColor);
 	glDisable(GL_POLYGON_OFFSET_FILL);
 	glDisable(GL_ALPHA_TEST);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDisable(GL_BLEND);
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(GL_TRUE);
 }
 
 
@@ -1041,7 +1067,9 @@ void CProjectileDrawer::GenerateNoiseTex(unsigned int tex, int size)
 
 void CProjectileDrawer::RenderProjectileCreated(const CProjectile* p)
 {
-#if defined(USE_GML) && GML_ENABLE_SIM
+	texturehandlerS3O->UpdateDraw();
+
+#if defined(USE_GML) && GML_ENABLE_SIM && !GML_SHARE_LISTS
 	if(p->model && TEX_TYPE(p) < 0)
 		TEX_TYPE(p) = texturehandlerS3O->LoadS3OTextureNow(p->model);
 #endif

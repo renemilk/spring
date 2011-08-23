@@ -1,15 +1,16 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "DemoReader.h"
+
+#include "System/mmgr.h"
+
+#include "System/Net/RawPacket.h"
+#include "Game/GameVersion.h"
 
 #include <limits.h>
 #include <stdexcept>
-#include <assert.h>
-#include "mmgr.h"
-
-#include "Net/RawPacket.h"
-#include "Game/GameVersion.h"
+#include <cassert>
+#include <cstring>
 
 CDemoReader::CDemoReader(const std::string& filename, float curTime)
 {
@@ -69,7 +70,7 @@ CDemoReader::CDemoReader(const std::string& filename, float curTime)
 netcode::RawPacket* CDemoReader::GetData(float readTime)
 {
 	if (ReachedEnd())
-		return 0;
+		return NULL;
 
 	// when paused, modGameTime does not increase (ie. we
 	// always pass the same readTime value) so no seperate
@@ -89,7 +90,7 @@ netcode::RawPacket* CDemoReader::GetData(float readTime)
 
 		return buf;
 	} else {
-		return 0;
+		return NULL;
 	}
 }
 

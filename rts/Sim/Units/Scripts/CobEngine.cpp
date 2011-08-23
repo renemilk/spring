@@ -1,17 +1,16 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "CobEngine.h"
 #include "CobThread.h"
 #include "CobInstance.h"
 #include "CobFile.h"
-#include "LogOutput.h"
-#include "FileSystem/FileHandler.h"
+#include "UnitScriptLog.h"
+#include "System/FileSystem/FileHandler.h"
 
 #ifndef _CONSOLE
-#include "TimeProfiler.h"
+#include "System/TimeProfiler.h"
 #endif
 #ifdef _CONSOLE
 #define START_TIME_PROFILE(a) {}
@@ -74,7 +73,7 @@ void CCobEngine::AddThread(CCobThread *thread)
 			sleeping.push(thread);
 			break;
 		default:
-			logOutput.Print("CobError: thread added to scheduler with unknown state (%d)", thread->state);
+			LOG_L(L_ERROR, "thread added to scheduler with unknown state (%d)", thread->state);
 			break;
 	}
 }
@@ -84,10 +83,7 @@ void CCobEngine::TickThread(int deltaTime, CCobThread* thread)
 {
 	curThread = thread; // for error messages originating in CUnitScript
 
-	int res = thread->Tick(deltaTime);
-	thread->CommitAnims(deltaTime);
-
-	if (res == -1)
+	if (!thread->Tick(deltaTime))
 		delete thread;
 
 	curThread = NULL;
@@ -96,17 +92,15 @@ void CCobEngine::TickThread(int deltaTime, CCobThread* thread)
 
 void CCobEngine::Tick(int deltaTime)
 {
-	SCOPED_TIMER("Scripts");
+	SCOPED_TIMER("CobEngine::Tick");
 
 	GCurrentTime += deltaTime;
 
-#if COB_DEBUG > 0
-	logOutput.Print("----");
-#endif
+	LOG_L(L_DEBUG, "----");
 
 	// Advance all running threads
-	for (std::list<CCobThread *>::iterator i = running.begin(); i != running.end(); ++i) {
-		//logOutput.Print("Now 1running %d: %s", GCurrentTime, (*i)->GetName().c_str());
+	for (std::list<CCobThread*>::iterator i = running.begin(); i != running.end(); ++i) {
+		//LOG_L(L_DEBUG, "Now 1running %d: %s", GCurrentTime, (*i)->GetName().c_str());
 #ifdef _CONSOLE
 		printf("----\n");
 #endif
@@ -123,19 +117,20 @@ void CCobEngine::Tick(int deltaTime)
 	for (std::list<CCobThread *>::iterator i = wantToRun.begin(); i != wantToRun.end(); ++i) {
 		running.push_front(*i);
 	}
+
 	wantToRun.clear();
 
 	//Check on the sleeping threads
 	if (!sleeping.empty()) {
-		CCobThread *cur = sleeping.top();
-		while ((cur != NULL) && (cur->GetWakeTime() < GCurrentTime)) {
+		CCobThread* cur = sleeping.top();
 
+		while ((cur != NULL) && (cur->GetWakeTime() < GCurrentTime)) {
 			// Start with removing the executing thread from the queue
 			sleeping.pop();
 
 			//Run forward again. This can quite possibly readd the thread to the sleeping array again
 			//But it will not interfere since it is guaranteed to sleep > 0 ms
-			//logOutput.Print("Now 2running %d: %s", GCurrentTime, cur->GetName().c_str());
+			//LOG_L(L_DEBUG, "Now 2running %d: %s", GCurrentTime, cur->GetName().c_str());
 #ifdef _CONSOLE
 			printf("+++\n");
 #endif
@@ -145,8 +140,9 @@ void CCobEngine::Tick(int deltaTime)
 			} else if (cur->state == CCobThread::Dead) {
 				delete cur;
 			} else {
-				logOutput.Print("CobError: Sleeping thread strange state %d", cur->state);
+				LOG_L(L_ERROR, "Sleeping thread strange state %d", cur->state);
 			}
+
 			if (!sleeping.empty())
 				cur = sleeping.top();
 			else
@@ -161,7 +157,7 @@ void CCobEngine::ShowScriptError(const string& msg)
 	if (curThread)
 		curThread->ShowError(msg);
 	else
-		logOutput.Print("ScriptError: %s outside script execution", msg.c_str());
+		LOG_L(L_ERROR, "%s outside script execution", msg.c_str());
 }
 
 

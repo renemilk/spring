@@ -2,14 +2,14 @@
 
 /* heavily based on CobInstance.h */
 
-#ifndef UNITSCRIPT_H
-#define UNITSCRIPT_H
+#ifndef UNIT_SCRIPT_H
+#define UNIT_SCRIPT_H
 
 #include <string>
 #include <vector>
 #include <list>
 
-#include "Object.h"
+#include "System/Object.h"
 #include "Rendering/Models/3DModel.h"
 
 
@@ -20,7 +20,7 @@ class CPlasmaRepulser;
 class CUnitScript : public CObject
 {
 public:
-	enum AnimType {ATurn, ASpin, AMove};
+	enum AnimType {ANone = -1, ATurn = 0, ASpin = 1, AMove = 2};
 
 	struct IAnimListener {
 		virtual ~IAnimListener() {}
@@ -68,27 +68,27 @@ protected:
 		int axis;
 		int piece;
 		float speed;
-		float dest;		//means final position when turning or moving, final speed when spinning
-		float accel;		//used for spinning, can be negative
-		bool interpolated;	//true if this animation is a result of interpolating a direct move/turn
-		std::list<IAnimListener *> listeners;
+		float dest;     // means final position when turning or moving, final speed when spinning
+		float accel;    // used for spinning, can be negative
+		bool done;
+		std::list<IAnimListener*> listeners;
 	};
 
-	std::list<AnimInfo*> anims;
+	std::list<AnimInfo*> anims[AMove + 1];
 
 	bool hasSetSFXOccupy;
 	bool hasRockUnit;
 	bool hasStartBuilding;
 
-	void UnblockAll(struct AnimInfo * anim);
+	void UnblockAll(AnimInfo* anim);
 
 	bool MoveToward(float &cur, float dest, float speed);
 	bool TurnToward(float &cur, float dest, float speed);
 	bool DoSpin(float &cur, float dest, float &speed, float accel, int divisor);
 
-	struct AnimInfo *FindAnim(AnimType anim, int piece, int axis);
-	void RemoveAnim(AnimType anim, int piece, int axis);
-	void AddAnim(AnimType type, int piece, int axis, float speed, float dest, float accel, bool interpolated = false);
+	std::list<AnimInfo*>::iterator FindAnim(AnimType anim, int piece, int axis);
+	void RemoveAnim(AnimType type, const std::list<AnimInfo*>::iterator& animInfoIt);
+	void AddAnim(AnimType type, int piece, int axis, float speed, float dest, float accel);
 
 	virtual void ShowScriptError(const std::string& msg) = 0;
 
@@ -140,19 +140,16 @@ public:
 	      CUnit* GetUnit()       { return unit; }
 	const CUnit* GetUnit() const { return unit; }
 
-	int Tick(int deltaTime);
+	bool Tick(int deltaTime);
+	void TickAnims(int deltaTime, AnimType type, std::list< std::list<AnimInfo*>::iterator >& doneAnims);
 
 	// animation, used by CCobThread
 	void Spin(int piece, int axis, float speed, float accel);
 	void StopSpin(int piece, int axis, float decel);
-	void Turn(int piece, int axis, float speed, float destination, bool interpolated = false);
-	void Move(int piece, int axis, float speed, float destination, bool interpolated = false);
+	void Turn(int piece, int axis, float speed, float destination);
+	void Move(int piece, int axis, float speed, float destination);
 	void MoveNow(int piece, int axis, float destination);
 	void TurnNow(int piece, int axis, float destination);
-
-	// for smoothing turn-now / move-now animations
-	void MoveSmooth(int piece, int axis, float destination, int delta, int deltaTime);
-	void TurnSmooth(int piece, int axis, float destination, int delta, int deltaTime);
 
 	bool AddAnimListener(AnimType type, int piece, int axis, IAnimListener* listener);
 
@@ -168,8 +165,10 @@ public:
 	void SetUnitVal(int val, int param);
 
 	bool IsInAnimation(AnimType type, int piece, int axis) {
-		const AnimInfo* ai = FindAnim(type, piece, axis);
-		return ai && !ai->interpolated;
+		return (FindAnim(type, piece, axis) != anims[type].end());
+	}
+	bool HaveAnimations() const {
+		return (!anims[ATurn].empty() || !anims[ASpin].empty() || !anims[AMove].empty());
 	}
 
 	// checks for callin existence
@@ -230,4 +229,4 @@ public:
 	static void BenchmarkScript(const std::string& unitname);
 };
 
-#endif
+#endif // UNIT_SCRIPT_H

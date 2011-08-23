@@ -6,6 +6,7 @@
 #include "lib/lua/src/lstate.h"
 #include "lualib.h"
 #include "lauxlib.h"
+#include "lib/streflop/streflop_cond.h"
 #include <boost/thread/recursive_mutex.hpp>
 
 
@@ -46,7 +47,13 @@ inline int lua_toint(lua_State* L, int idx)
 
 inline float lua_tofloat(lua_State* L, int idx)
 {
-  return (float)lua_tonumber(L, idx);
+  const float n = lua_tonumber(L, idx);
+#ifdef DEBUG
+  if (math::isinf(n) || math::isnan(n)) luaL_argerror(L, idx, "number expected, got NAN (check your code for div0)");
+  //assert(!math::isinf(d));
+  //assert(!math::isnan(d));
+#endif
+  return n;
 }
 
 

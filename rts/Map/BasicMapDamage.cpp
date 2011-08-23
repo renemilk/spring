@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "BasicMapDamage.h"
 #include "ReadMap.h"
@@ -9,21 +8,20 @@
 #include "BaseGroundDrawer.h"
 #include "HeightMapTexture.h"
 #include "Rendering/Env/ITreeDrawer.h"
-#include "Rendering/Env/BaseWater.h"
-#include "TimeProfiler.h"
+#include "Rendering/Env/IWater.h"
 #include "Sim/Misc/GroundBlockingObjectMap.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/QuadField.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitHandler.h"
-#include "LogOutput.h"
 #include "Sim/Path/IPathManager.h"
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Units/UnitTypes/Building.h"
 #include "Sim/Units/UnitDef.h"
+#include "System/TimeProfiler.h"
 
 
-CBasicMapDamage::CBasicMapDamage(void)
+CBasicMapDamage::CBasicMapDamage()
 {
 	const int numQuads = qf->GetNumQuadsX() * qf->GetNumQuadsZ();
 	inRelosQue = new bool[numQuads];
@@ -48,7 +46,7 @@ CBasicMapDamage::CBasicMapDamage(void)
 	disabled = false;
 }
 
-CBasicMapDamage::~CBasicMapDamage(void)
+CBasicMapDamage::~CBasicMapDamage()
 {
 	while (!explosions.empty()) {
 		delete explosions.front();
@@ -59,12 +57,16 @@ CBasicMapDamage::~CBasicMapDamage(void)
 
 void CBasicMapDamage::Explosion(const float3& pos, float strength, float radius)
 {
-	if (pos.x < 0.0f || pos.z < 0.0f || pos.x > gs->mapx * SQUARE_SIZE || pos.z > gs->mapy * SQUARE_SIZE) {
+	if ((pos.x < 0.0f) || (pos.x > gs->mapx * SQUARE_SIZE)) {
+		return;
+	}
+	if ((pos.z < 0.0f) || (pos.z > gs->mapy * SQUARE_SIZE)) {
 		return;
 	}
 
-	if (strength < 10.0f || radius < 8.0f)
+	if (strength < 10.0f || radius < 8.0f) {
 		return;
+	}
 
 	radius *= 1.5f;
 
@@ -78,17 +80,19 @@ void CBasicMapDamage::Explosion(const float3& pos, float strength, float radius)
 	e->y2 = std::min((int) (pos.z + radius) / SQUARE_SIZE, gs->mapy - 3);
 	e->squares.reserve((e->y2 - e->y1 + 1) * (e->x2 - e->x1 + 1));
 
-	const float* heightmap = readmap->GetHeightmap();
+	const float* curHeightMap = readmap->GetCornerHeightMapSynced();
+	const float* orgHeightMap = readmap->GetOriginalHeightMapSynced();
+	const unsigned char* typeMap = readmap->GetTypeMapSynced();
 	const float baseStrength = -pow(strength, 0.6f) * 3 / mapHardness;
 	const float invRadius = 1.0f / radius;
 
 	for (int y = e->y1; y <= e->y2; ++y) {
 		for (int x = e->x1; x <= e->x2; ++x) {
-			CSolidObject* so = groundBlockingObjectMap->GroundBlockedUnsafe(y * gs->mapx + x);
+			const CSolidObject* so = groundBlockingObjectMap->GroundBlockedUnsafe(y * gs->mapx + x);
 
-			// don't change squares with buildings on them here
+			// do not change squares with buildings on them here
 			if (so && so->blockHeightChanges) {
-				e->squares.push_back(0);
+				e->squares.push_back(0.0f);
 				continue;
 			}
 
@@ -98,13 +102,13 @@ void CBasicMapDamage::Explosion(const float3& pos, float strength, float radius)
 			const unsigned int tableIdx = relDist * CRATER_TABLE_SIZE;
 
 			float dif =
-				baseStrength * craterTable[tableIdx] *
-				invHardness[readmap->typemap[(y / 2) * gs->hmapx + x / 2]];
+					baseStrength * craterTable[tableIdx] *
+					invHardness[typeMap[(y / 2) * gs->hmapx + x / 2]];
 
 			// FIXME: compensate for flattened ground under dead buildings
 			const float prevDif =
-				heightmap[y * (gs->mapx + 1) + x] -
-				readmap->orgheightmap[y * (gs->mapx + 1) + x];
+				curHeightMap[y * gs->mapxp1 + x] -
+				orgHeightMap[y * gs->mapxp1 + x];
 
 			if (prevDif * dif > 0.0f) {
 				dif /= fabs(prevDif) * 0.1f + 1;
@@ -112,13 +116,14 @@ void CBasicMapDamage::Explosion(const float3& pos, float strength, float radius)
 
 			e->squares.push_back(dif);
 
-			if (dif < -0.3f && strength > 200.0f)
+			if (dif < -0.3f && strength > 200.0f) {
 				treeDrawer->RemoveGrass(x, y);
+			}
 		}
 	}
 
 	// calculate how much to offset the buildings in the explosion radius with
-	// (while still keeping the ground under them flat)
+	// (while still keeping the ground below them flat)
 	const std::vector<CUnit*>& units = qf->GetUnitsExact(pos, radius);
 	for (std::vector<CUnit*>::const_iterator ui = units.begin(); ui != units.end(); ++ui) {
 		CUnit* unit = *ui;
@@ -136,11 +141,11 @@ void CBasicMapDamage::Explosion(const float3& pos, float strength, float radius)
 				const unsigned int tableIdx = relDist * CRATER_TABLE_SIZE;
 
 				float dif =
-					baseStrength * craterTable[tableIdx] *
-					invHardness[readmap->typemap[(z / 2) * gs->hmapx + x / 2]];
+						baseStrength * craterTable[tableIdx] *
+						invHardness[typeMap[(z / 2) * gs->hmapx + x / 2]];
 				const float prevDif =
-					heightmap[z * (gs->mapx + 1) + x] -
-					readmap->orgheightmap[z * (gs->mapx + 1) + x];
+						curHeightMap[z * gs->mapxp1 + x] -
+						orgHeightMap[z * gs->mapxp1 + x];
 
 				if (prevDif * dif > 0.0f) {
 					dif /= fabs(prevDif) * 0.1f + 1;
@@ -195,48 +200,48 @@ void CBasicMapDamage::RecalcArea(int x1, int x2, int y1, int y2)
 		}
 	}
 
-	readmap->HeightmapUpdated(x1, y1, x2, y2);
+	readmap->UpdateHeightMapSynced(x1, y1, x2, y2);
 	pathManager->TerrainChange(x1, y1, x2, y2);
 	featureHandler->TerrainChanged(x1, y1, x2, y2);
-	CBaseWater::PushHeightmapChange(x1, y1, x2, y2);
-	heightMapTexture.UpdateArea(x1, y1, x2, y2);
 }
 
 
-void CBasicMapDamage::Update(void)
+void CBasicMapDamage::Update()
 {
-	SCOPED_TIMER("Map damage");
+	SCOPED_TIMER("BasicMapDamage::Update");
 
 	std::deque<Explo*>::iterator ei;
 
 	for (ei = explosions.begin(); ei != explosions.end(); ++ei) {
 		Explo* e = *ei;
-		if (e->ttl <= 0) continue;
+		if (e->ttl <= 0) {
+			continue;
+		}
 		--e->ttl;
 
-		int x1 = e->x1;
-		int x2 = e->x2;
-		int y1 = e->y1;
-		int y2 = e->y2;
-		std::vector<float>::iterator si = e->squares.begin();
+		const int x1 = e->x1;
+		const int x2 = e->x2;
+		const int y1 = e->y1;
+		const int y2 = e->y2;
+		std::vector<float>::const_iterator si = e->squares.begin();
 
 		for (int y = y1; y <= y2; ++y) {
 			for (int x = x1; x<= x2; ++x) {
-				float dif = *(si++);
-
-				readmap->AddHeight(y * (gs->mapx + 1) + x, dif);
+				const float dif = *(si++);
+				readmap->AddHeight(y * gs->mapxp1 + x, dif);
 			}
 		}
-		for (std::vector<ExploBuilding>::iterator bi = e->buildings.begin(); bi != e->buildings.end(); ++bi) {
-			float dif = bi->dif;
-			int tx1 = bi->tx1;
-			int tx2 = bi->tx2;
-			int tz1 = bi->tz1;
-			int tz2 = bi->tz2;
+		std::vector<ExploBuilding>::const_iterator bi;
+		for (bi = e->buildings.begin(); bi != e->buildings.end(); ++bi) {
+			const float dif = bi->dif;
+			const int tx1 = bi->tx1;
+			const int tx2 = bi->tx2;
+			const int tz1 = bi->tz1;
+			const int tz2 = bi->tz2;
 
 			for (int z = tz1; z < tz2; z++) {
 				for (int x = tx1; x < tx2; x++) {
-					readmap->AddHeight(z * (gs->mapx + 1) + x, dif);
+					readmap->AddHeight(z * gs->mapxp1 + x, dif);
 				}
 			}
 
@@ -259,18 +264,20 @@ void CBasicMapDamage::Update(void)
 	UpdateLos();
 }
 
-void CBasicMapDamage::UpdateLos(void)
+void CBasicMapDamage::UpdateLos()
 {
-	int updateSpeed = (int) (relosSize * 0.01f) + 1;
+	const int updateSpeed = (int) (relosSize * 0.01f) + 1;
 
 	if (relosUnits.empty()) {
-		if (relosQue.empty())
+		if (relosQue.empty()) {
 			return;
+		}
 
 		RelosSquare* rs = &relosQue.front();
 		const std::list<CUnit*>& units = qf->GetQuadAt(rs->x, rs->y).units;
 
-		for (std::list<CUnit*>::const_iterator ui = units.begin(); ui != units.end(); ++ui) {
+		std::list<CUnit*>::const_iterator ui;
+		for (ui = units.begin(); ui != units.end(); ++ui) {
 			relosUnits.push_back((*ui)->id);
 		}
 		relosSize -= rs->numUnits;
@@ -280,16 +287,17 @@ void CBasicMapDamage::UpdateLos(void)
 	}
 
 	for (int a = 0; a < updateSpeed; ++a) {
-		if (relosUnits.empty())
+		if (relosUnits.empty()) {
 			return;
+		}
 
-		CUnit* u = uh->units[relosUnits.front()];
+		CUnit* unit = uh->units[relosUnits.front()];
 		relosUnits.pop_front();
 
-		if (u == 0 || u->lastLosUpdate >= neededLosUpdate) {
+		if (unit == NULL || unit->lastLosUpdate >= neededLosUpdate) {
 			continue;
 		}
 
-		loshandler->MoveUnit(u, true);
+		loshandler->MoveUnit(unit, true);
 	}
 }

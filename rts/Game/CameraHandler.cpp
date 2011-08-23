@@ -1,9 +1,8 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <cstdlib>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "CameraHandler.h"
 
@@ -18,10 +17,24 @@
 #include "Camera/OverviewController.h"
 #include "Camera/TWController.h"
 #include "Camera/OrbitController.h"
-#include "ConfigHandler.h"
-#include "LogOutput.h"
-#include "GlobalUnsynced.h"
 #include "Rendering/GlobalRendering.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
+
+CONFIG(std::string, CamModeName).defaultValue("");
+
+CONFIG(int, CamMode)
+	.defaultValue(CCameraHandler::CAMERA_MODE_SMOOTH)
+	.minimumValue(0)
+	.maximumValue(CCameraHandler::CAMERA_MODE_LAST - 1);
+
+CONFIG(float, CamTimeFactor)
+	.defaultValue(1.0f)
+	.minimumValue(0.0f);
+
+CONFIG(float, CamTimeExponent)
+	.defaultValue(4.0f)
+	.minimumValue(0.0f);
 
 
 CCameraHandler* camHandler = NULL;
@@ -48,22 +61,18 @@ CCameraHandler::CCameraHandler()
 	}
 
 	int modeIndex;
-	const std::string modeName = configHandler->GetString("CamModeName", "");
+	const std::string modeName = configHandler->GetString("CamModeName");
 	if (!modeName.empty()) {
 		modeIndex = GetModeIndex(modeName);
 	} else {
-		modeIndex = configHandler->Get("CamMode", 5);
+		modeIndex = configHandler->GetInt("CamMode");
 	}
 
-	const unsigned int mode =
-		(unsigned int)std::max(0, std::min(modeIndex, (int)camControllers.size() - 1));
-
-	currCamCtrlNum = mode;
+	currCamCtrlNum = modeIndex;
 	currCamCtrl = camControllers[currCamCtrlNum];
 
-	const double z = 0.0; // casting problems...
-	cameraTimeFactor   = std::max(z, atof(configHandler->GetString("CamTimeFactor",   "1.0").c_str()));
-	cameraTimeExponent = std::max(z, atof(configHandler->GetString("CamTimeExponent", "4.0").c_str()));
+	cameraTimeFactor   = configHandler->GetFloat("CamTimeFactor");
+	cameraTimeExponent = configHandler->GetFloat("CamTimeExponent");
 
 	RegisterAction("viewfps");
 	RegisterAction("viewta");
@@ -347,12 +356,13 @@ void CCameraHandler::PushAction(const Action& action)
 	else if (cmd == "viewsave") {
 		if (!action.extra.empty()) {
 			SaveView(action.extra);
-			logOutput.Print("Saved view: " + action.extra);
+			LOG("Saved view: %s", action.extra.c_str());
 		}
 	}
 	else if (cmd == "viewload") {
-		if (!LoadView(action.extra))
-			logOutput.Print("Loading view failed!");
+		if (!LoadView(action.extra)) {
+			LOG_L(L_WARNING, "Loading view failed!");
+		}
 	}
 	else if (cmd == "toggleoverview") {
 		ToggleOverviewCamera();

@@ -1,28 +1,26 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
+#include "System/mmgr.h"
 
-#include <list>
-#include <cstring>
-
-#include "mmgr.h"
-
-#include "Rendering/GL/myGL.h"
 #include "TextureAtlas.h"
+
 #include "Bitmap.h"
 #include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
 #include "Rendering/GL/PBO.h"
-#include "System/GlobalUnsynced.h"
 #include "System/FileSystem/FileHandler.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Util.h"
 #include "System/Exceptions.h"
 #include "System/Vec2.h"
 
+#include <list>
+#include <cstring>
+
 CR_BIND(AtlasedTexture, );
 CR_BIND_DERIVED(GroundFXTexture, AtlasedTexture, );
 
-//texture spacing in the atlas (in pixels)
+// texture spacing in the atlas (in pixels)
 #define TEXMARGIN 2
 
 bool CTextureAtlas::debug;
@@ -225,8 +223,8 @@ void CTextureAtlas::CreateTexture()
 	PBO pbo;
 	pbo.Bind();
 	pbo.Resize(xsize * ysize * 4);
-	unsigned char* data = (unsigned char*)pbo.MapBuffer(debug ? GL_READ_WRITE : GL_WRITE_ONLY);
-	std::memset(data, 0, xsize * ysize * 4); // make spacing between textures black transparent to avoid ugly lines with linear filtering
+	unsigned char* data = (unsigned char*)pbo.MapBuffer(GL_WRITE_ONLY);
+	std::memset(data, 0, xsize * ysize * 4); //! make spacing between textures black transparent to avoid ugly lines with linear filtering
 
 	for (size_t i = 0; i < memtextures.size(); ++i) {
 		MemTex& tex = *memtextures[i];
@@ -236,18 +234,20 @@ void CTextureAtlas::CreateTexture()
 			memcpy(dst, src, tex.xsize * 4);
 		}
 	}
-	pbo.UnmapBuffer();
 
 	if (debug) {
-		// hack to make sure we don't overwrite our own atlases
+		//! hack to make sure we don't overwrite our own atlases
 		static int count = 0;
 		char fname[256];
 		SNPRINTF(fname, sizeof(fname), "textureatlas%d.png", ++count);
+
+		//! even pbo.MapBuffer(GL_WRITE_ONLY) we can readback from it. GL_READ is only needed if we want to readback GPU data!
 		CBitmap save(data,xsize,ysize);
 		save.Save(fname);
-		logOutput.Print("Saved finalized textureatlas to '%s'.", fname);
+		LOG("Saved finalized texture-atlas to '%s'.", fname);
 	}
 
+	pbo.UnmapBuffer();
 
 	glGenTextures(1, &gltex);
 	glBindTexture(GL_TEXTURE_2D, gltex);

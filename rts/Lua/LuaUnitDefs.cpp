@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include <set>
 #include <string>
@@ -9,7 +8,7 @@
 #include <map>
 #include <cctype>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaUnitDefs.h"
 
@@ -32,8 +31,7 @@
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/QuadField.h"
 #include "Sim/Misc/Wind.h"
-#include "Sim/MoveTypes/AirMoveType.h"
-#include "Sim/MoveTypes/TAAirMoveType.h"
+#include "Sim/MoveTypes/MoveInfo.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/UnitHandler.h"
@@ -44,16 +42,12 @@
 #include "Sim/Units/CommandAI/Command.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
 #include "Sim/Units/CommandAI/FactoryCAI.h"
-#include "Sim/Units/CommandAI/LineDrawer.h"
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
-#include "LogOutput.h"
-#include "FileSystem/FileHandler.h"
-#include "FileSystem/SimpleParser.h"
-#include "FileSystem/FileSystem.h"
-#include "Util.h"
-
-using namespace std;
+#include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/SimpleParser.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/Util.h"
 
 
 static ParamMap paramMap;
@@ -356,7 +350,6 @@ static int BuildOptions(lua_State* L, const void* data)
 			lua_rawset(L, -3);
 		}
 	}
-	HSTR_PUSH_NUMBER(L, "n", count);
 	return 1;
 }
 
@@ -424,7 +417,6 @@ static int WeaponsTable(lua_State* L, const void* data)
 		}
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", weaponCount);
 
 	return 1;
 }
@@ -447,7 +439,6 @@ static void PushGuiSoundSet(lua_State* L, const string& name,
 		}
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", soundCount);
 	lua_rawset(L, -3);
 }
 
@@ -726,7 +717,7 @@ ADD_BOOL("canAttackWater",  canAttackWater); // CUSTOM
 
 	ADD_FLOAT("mass", ud.mass);
 
-	ADD_FLOAT("maxSlope",      ud.maxSlope);
+	ADD_FLOAT("maxSlope",      ud.maxHeightDif); // NOTE: deprecated, remove after 0.83.*
 	ADD_FLOAT("maxHeightDif",  ud.maxHeightDif);
 	ADD_FLOAT("minWaterDepth", ud.minWaterDepth);
 	ADD_FLOAT("waterline",     ud.waterline);
@@ -773,7 +764,8 @@ ADD_BOOL("canAttackWater",  canAttackWater); // CUSTOM
 	ADD_BOOL("capturable",  ud.capturable);
 	ADD_BOOL("repairable",  ud.repairable);
 
-	ADD_BOOL("canDGun",               ud.canDGun);
+	ADD_BOOL("canDGun",               ud.canManualFire); // NOTE: deprecated, remove after 0.83.*
+	ADD_BOOL("canManualFire",         ud.canManualFire);
 	ADD_BOOL("canCloak",              ud.canCloak);
 	ADD_BOOL("canRestore",            ud.canRestore);
 	ADD_BOOL("canRepair",             ud.canRepair);
@@ -789,7 +781,7 @@ ADD_BOOL("canAttackWater",  canAttackWater); // CUSTOM
 	ADD_BOOL("canCapture",            ud.canCapture);
 	ADD_BOOL("canResurrect",          ud.canResurrect);
 	ADD_BOOL("canLoopbackAttack",     ud.canLoopbackAttack);
-	ADD_BOOL("canCrash",              ud.canCrash);
+	ADD_BOOL("canCrash",              ud.canLoopbackAttack); // NOTE: deprecated, remove after 0.83.*
 	ADD_BOOL("canFireControl",        ud.canFireControl);
 	ADD_INT( "fireState",             ud.fireState);
 	ADD_INT( "moveState",             ud.moveState);
@@ -896,8 +888,6 @@ ADD_BOOL("canAttackWater",  canAttackWater); // CUSTOM
 	ADD_INT(  "flareSalvoSize",   ud.flareSalvoSize);
 	ADD_INT(  "flareSalvoDelay",  ud.flareSalvoDelay);
 
-	ADD_BOOL("smoothAnim", ud.smoothAnim);
-
 	ADD_BOOL("levelGround", ud.levelGround);
 	ADD_BOOL("strafeToAttack", ud.strafeToAttack);
 
@@ -912,9 +902,6 @@ ADD_BOOL("canAttackWater",  canAttackWater); // CUSTOM
 	ADD_FLOAT("nanoColorR",   ud.nanoColor.x);
 	ADD_FLOAT("nanoColorG",   ud.nanoColor.y);
 	ADD_FLOAT("nanoColorB",   ud.nanoColor.z);
-
-	ADD_STRING("pieceTrailCEGTag",   ud.pieceTrailCEGTag);
-	ADD_INT(   "pieceTrailCEGRange", ud.pieceTrailCEGRange);
 
 	ADD_STRING("scriptName", ud.scriptName);
 	ADD_STRING("scriptPath", ud.scriptPath);

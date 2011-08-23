@@ -1,10 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "GameController.h"
-#include "Platform/Clipboard.h"
+#include "System/Platform/Clipboard.h"
 
 
 CGameController* activeController = NULL;

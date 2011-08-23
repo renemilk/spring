@@ -9,20 +9,16 @@
 #include <boost/system/system_error.hpp>
 #include <boost/bind.hpp>
 
-#include "SpringApp.h"
+#include "System/SpringApp.h"
 
 #include "lib/gml/gml.h"
 #include "lib/gml/gmlmut.h"
 #include "System/Exceptions.h"
-#include "System/LogOutput.h"
 #include "System/Platform/errorhandler.h"
 #include "System/Platform/Threading.h"
 
-#ifdef WIN32
-	#include "Platform/Win/win32.h"
-#endif
 
-#ifndef __APPLE__
+#if !defined(__APPLE__) || !defined(HEADLESS)
 	// SDL_main.h contains a macro that replaces the main function on some OS, see SDL_main.h for details
 	#include <SDL_main.h>
 #endif
@@ -72,6 +68,14 @@ int Run(int argc, char* argv[])
 
 	return ret;
 }
+
+/**
+	\mainpage
+	This is the documentation of the Spring RTS Engine.
+
+	http://springrts.com/
+
+*/
 
 
 

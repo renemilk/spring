@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include "GlobalRendering.h"
 
@@ -8,12 +7,16 @@
 #include "Sim/Misc/GlobalConstants.h"
 #include "System/mmgr.h"
 #include "System/Util.h"
-#include "System/ConfigHandler.h"
-#include "System/LogOutput.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
 #include "System/creg/creg_cond.h"
 
 #include <string>
 
+CONFIG(bool, CompressTextures).defaultValue(false);
+CONFIG(int, AtiHacks).defaultValue(-1);
+CONFIG(bool, DualScreenMode).defaultValue(false);
+CONFIG(bool, DualScreenMiniMapOnLeft).defaultValue(false);
 
 /**
  * @brief global rendering
@@ -49,12 +52,6 @@ CGlobalRendering::CGlobalRendering() {
 	lastFrameTime = 0.0f;
 	drawFrame = 1;
 
-	viewSizeX = 100;
-	viewSizeY = 100;
-	pixelX = 0.01f;
-	pixelY = 0.01f;
-	aspectRatio = 1.0f;
-	
 	FSAA = 0;
 
 	drawSky      = true;
@@ -80,34 +77,44 @@ CGlobalRendering::CGlobalRendering() {
 	supportNPOTs = false;
 	haveATI = false;
 	depthBufferBits = false;
-	
-	viewPosX = 0;
-	viewPosY = 0;
-	
+
 	winState = 0;
-	
-	winSizeX = 0;
-	winSizeY = 0;
-	
+
+	// window geometry
 	winPosX = 0;
 	winPosY = 0;
-	
-	screenSizeX = 0;
-	screenSizeY = 0;
-	
+	winSizeX = 1;
+	winSizeY = 1;
+	screenSizeX = 1;
+	screenSizeY = 1;
+
+	// viewport geometry
+	viewPosX = 0;
+	viewPosY = 0;
+	viewSizeX = 1;
+	viewSizeY = 1;
+
+	// pixel geometry
+	pixelX = 0.01f;
+	pixelY = 0.01f;
+	aspectRatio = 1.0f;
+
 	weightedSpeedFactor = 0.0f;
 	lastFrameStart = 0;
 }
 
 void CGlobalRendering::PostInit() {
-
 	supportNPOTs = GLEW_ARB_texture_non_power_of_two;
 	haveARB = GLEW_ARB_vertex_program && GLEW_ARB_fragment_program;
+	// not enough: we want OpenGL 2.0 core functions
+	// haveGLSL = GL_ARB_vertex_shader && GL_ARB_fragment_shader;
 	haveGLSL = !!GLEW_VERSION_2_0;
 
 	{
-		const std::string vendor = StringToLower(std::string((char*) glGetString(GL_VENDOR)));
-		const std::string renderer = StringToLower(std::string((char*) glGetString(GL_RENDERER)));
+		const char* glVendor = (const char*) glGetString(GL_VENDOR);
+		const char* glRenderer = (const char*) glGetString(GL_RENDERER);
+		const std::string vendor = (glVendor != NULL)? StringToLower(std::string(glVendor)): "";
+		const std::string renderer = (glRenderer != NULL)? StringToLower(std::string(glRenderer)): "";
 
 		haveATI = (vendor.find("ati ") != std::string::npos);
 
@@ -121,7 +128,7 @@ void CGlobalRendering::PostInit() {
 	if (GLEW_ARB_texture_compression) {
 		//! we don't even need to check it, 'cos groundtextures must have that extension
 		//! default to off because it reduces quality (smallest mipmap level is bigger)
-		compressTextures = !!configHandler->Get("CompressTextures", 0);
+		compressTextures = configHandler->GetBool("CompressTextures");
 	}
 
 	//! maximum 2D texture size
@@ -130,10 +137,62 @@ void CGlobalRendering::PostInit() {
 	}
 
 	//! use some ATI bugfixes?
-	const int atiHacksCfg = configHandler->Get("AtiHacks", -1);
+	const int atiHacksCfg = configHandler->GetInt("AtiHacks");
 	atiHacks = haveATI && (atiHacksCfg < 0); //! runtime detect
 	atiHacks |= (atiHacksCfg > 0); //! user override
 	if (atiHacks) {
-		logOutput.Print("ATI hacks enabled\n");
+		LOG("ATI hacks enabled");
 	}
+}
+
+
+
+void CGlobalRendering::SetDualScreenParams() {
+	dualScreenMode = configHandler->GetBool("DualScreenMode");
+
+	if (dualScreenMode) {
+		dualScreenMiniMapOnLeft = configHandler->GetBool("DualScreenMiniMapOnLeft");
+	} else {
+		dualScreenMiniMapOnLeft = false;
+	}
+}
+
+void CGlobalRendering::UpdateWindowGeometry() {
+	// NOTE:
+	//   in headless builds this is not called,
+	//   therefore winSize{X,Y} both remain 1
+	screenSizeX = viewSizeX;
+	screenSizeY = viewSizeY;
+	winSizeX = viewSizeX;
+	winSizeY = viewSizeY;
+	winPosX = 0;
+	winPosY = 0;
+}
+
+void CGlobalRendering::UpdateViewPortGeometry() {
+	// NOTE: viewPosY is not currently used (always 0)
+	if (!dualScreenMode) {
+		viewSizeX = winSizeX;
+		viewSizeY = winSizeY;
+		viewPosX = 0;
+		viewPosY = 0;
+	} else {
+		viewSizeX = winSizeX / 2;
+		viewSizeY = winSizeY;
+
+		if (dualScreenMiniMapOnLeft) {
+			viewPosX = winSizeX / 2;
+			viewPosY = 0;
+		} else {
+			viewPosX = 0;
+			viewPosY = 0;
+		}
+	}
+}
+
+void CGlobalRendering::UpdatePixelGeometry() {
+	pixelX = 1.0f / viewSizeX;
+	pixelY = 1.0f / viewSizeY;
+
+	aspectRatio = viewSizeX / float(viewSizeY);
 }

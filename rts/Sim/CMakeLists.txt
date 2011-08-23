@@ -33,7 +33,7 @@ SET(sources_engine_Sim
 		"${CMAKE_CURRENT_SOURCE_DIR}/Misc/TeamStatistics.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Misc/Wind.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/AAirMoveType.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/AirMoveType.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/StrafeAirMoveType.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/GroundMoveType.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/MoveInfo.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/MoveMath/GroundMoveMath.cpp"
@@ -44,7 +44,7 @@ SET(sources_engine_Sim
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/MoveTypeFactory.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/ScriptMoveType.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/StaticMoveType.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/TAAirMoveType.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/MoveTypes/HoverAirMoveType.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Objects/SolidObject.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Objects/WorldObject.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathAllocator.cpp"
@@ -101,7 +101,6 @@ SET(sources_engine_Sim
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/CommandAI/Command.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/CommandAI/CommandAI.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/CommandAI/FactoryCAI.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/Units/CommandAI/LineDrawer.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/CommandAI/MobileCAI.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/CommandAI/TransportCAI.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/Groups/Group.cpp"
@@ -129,6 +128,7 @@ SET(sources_engine_Sim
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/UnitTypes/Factory.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Units/UnitTypes/TransportUnit.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/BeamLaser.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/BombDropper.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/Cannon.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/DGunWeapon.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/EmgCannon.cpp"
@@ -145,7 +145,6 @@ SET(sources_engine_Sim
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/Weapon.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/WeaponDef.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/WeaponDefHandler.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/Weapons/bombdropper.cpp"
 	)
 
 MakeGlobal(sources_engine_Sim)

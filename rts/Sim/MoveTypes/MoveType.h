@@ -3,7 +3,7 @@
 #ifndef MOVETYPE_H
 #define MOVETYPE_H
 
-#include "creg/creg_cond.h"
+#include "System/creg/creg_cond.h"
 #include "Sim/Misc/AirBaseHandler.h"
 #include "System/Object.h"
 #include "System/float3.h"
@@ -16,7 +16,7 @@ class AMoveType : public CObject
 
 public:
 	AMoveType(CUnit* owner);
-	virtual ~AMoveType(void);
+	virtual ~AMoveType() {}
 
 	virtual void StartMoving(float3 pos, float goalRadius) = 0;
 	virtual void StartMoving(float3 pos, float goalRadius, float speed) = 0;
@@ -29,10 +29,14 @@ public:
 	virtual void SetGoal(const float3& pos);
 	virtual void SetMaxSpeed(float speed);
 	virtual void SetWantedMaxSpeed(float speed);
-	virtual void LeaveTransport(void);
+	virtual void LeaveTransport() {}
 
 	virtual bool Update() = 0;
 	virtual void SlowUpdate();
+
+	virtual bool IsSkidding() const { return false; }
+	virtual bool IsFlying() const { return false; }
+	virtual bool IsReversing() const { return false; }
 
 	bool WantsRepair() const;
 	bool WantsRefuel() const;

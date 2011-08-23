@@ -1,11 +1,16 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "EventHandler.h"
+#include "System/EventHandler.h"
+
+#include "Game/UI/LuaUI.h"  // FIXME -- should be moved
 #include "Lua/LuaCallInCheck.h"
 #include "Lua/LuaOpenGL.h"  // FIXME -- should be moved
-#include "System/ConfigHandler.h"
+#include "Lua/LuaRules.h"
+#include "Lua/LuaGaia.h"
+
+#include "System/Config/ConfigHandler.h"
 #include "System/Platform/Threading.h"
+#include "System/GlobalConfig.h"
 
 using std::string;
 using std::vector;
@@ -95,6 +100,7 @@ CEventHandler::CEventHandler()
 	// unsynced call-ins
 	SETUP_EVENT(Save,           MANAGED_BIT | UNSYNCED_BIT);
 
+	SETUP_EVENT(UnsyncedHeightMapUpdate, MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(Update,         MANAGED_BIT | UNSYNCED_BIT);
 
 	SETUP_EVENT(KeyPress,       MANAGED_BIT | UNSYNCED_BIT);
@@ -110,6 +116,7 @@ CEventHandler::CEventHandler()
 	SETUP_EVENT(DefaultCommand, MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(CommandNotify,  MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(AddConsoleLine, MANAGED_BIT | UNSYNCED_BIT);
+	SETUP_EVENT(LastMessagePosition, MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(GroupChanged,   MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(GameSetup,      MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(WorldTooltip,   MANAGED_BIT | UNSYNCED_BIT);
@@ -138,6 +145,8 @@ CEventHandler::CEventHandler()
 
 	SETUP_EVENT(RenderProjectileCreated,   MANAGED_BIT | UNSYNCED_BIT);
 	SETUP_EVENT(RenderProjectileDestroyed, MANAGED_BIT | UNSYNCED_BIT);
+
+	SETUP_EVENT(GameProgress,  MANAGED_BIT | UNSYNCED_BIT);
 
 	// unmanaged call-ins
 	SetupEvent("Shutdown", NULL, 0);
@@ -347,7 +356,7 @@ void CEventHandler::GameStart()
 }
 
 
-void CEventHandler::GameOver( std::vector<unsigned char> winningAllyTeams )
+void CEventHandler::GameOver(const std::vector<unsigned char>& winningAllyTeams)
 {
 	const int count = listGameOver.size();
 	for (int i = 0; i < count; i++) {
@@ -430,7 +439,7 @@ void CEventHandler::PlayerRemoved(int playerID, int reason)
 /******************************************************************************/
 /******************************************************************************/
 
-void CEventHandler::Load(CArchiveBase* archive)
+void CEventHandler::Load(IArchive* archive)
 {
 	const int count = listLoad.size();
 
@@ -445,21 +454,22 @@ void CEventHandler::Load(CArchiveBase* archive)
 
 
 #ifdef USE_GML
-	#define GML_DRAW_CALLIN_SELECTOR() if(!gc->enableDrawCallIns) return
+	#define GML_DRAW_CALLIN_SELECTOR() if(!globalConfig->enableDrawCallIns) return
 #else
 	#define GML_DRAW_CALLIN_SELECTOR()
 #endif
 
 #define GML_CALLIN_MUTEXES() \
-	GML_RECMUTEX_LOCK(unit); \
-	GML_RECMUTEX_LOCK(feat)
+	GML_THRMUTEX_LOCK(feat, GML_DRAW); \
+	GML_THRMUTEX_LOCK(unit, GML_DRAW)/*; \
+	GML_THRMUTEX_LOCK(proj, GML_DRAW)*/
 
 
 #define EVENTHANDLER_CHECK(name, ...) \
 	const int count = list ## name.size(); \
 	if (count <= 0) \
 		return __VA_ARGS__; \
-	GML_CALLIN_MUTEXES();
+	GML_CALLIN_MUTEXES()
 
 
 void CEventHandler::Update()
@@ -475,6 +485,54 @@ void CEventHandler::Update()
 }
 
 
+
+void CEventHandler::UpdateUnits(void) { eventBatchHandler->UpdateUnits(); }
+void CEventHandler::UpdateDrawUnits() { eventBatchHandler->UpdateDrawUnits(); }
+void CEventHandler::DeleteSyncedUnits() {
+	eventBatchHandler->DeleteSyncedUnits();
+	GML_STDMUTEX_LOCK(luaui); // DeleteSyncedUnits
+	if (luaUI) luaUI->ExecuteUnitEventBatch();
+}
+
+void CEventHandler::UpdateFeatures(void) { eventBatchHandler->UpdateFeatures(); }
+void CEventHandler::UpdateDrawFeatures() { eventBatchHandler->UpdateDrawFeatures(); }
+void CEventHandler::DeleteSyncedFeatures() {
+	eventBatchHandler->DeleteSyncedFeatures();
+	GML_STDMUTEX_LOCK(luaui); // DeleteSyncedFeatures
+	if (luaUI) luaUI->ExecuteFeatEventBatch();
+}
+
+void CEventHandler::UpdateProjectiles() { eventBatchHandler->UpdateProjectiles(); }
+void CEventHandler::UpdateDrawProjectiles() { eventBatchHandler->UpdateDrawProjectiles(); }
+void CEventHandler::DeleteSyncedProjectiles() {
+	if (luaRules) luaRules->ExecuteRecvFromSynced();
+	if (luaGaia) luaGaia->ExecuteRecvFromSynced();
+	eventBatchHandler->DeleteSyncedProjectiles();
+
+	GML_STDMUTEX_LOCK(luaui); // DeleteSyncedProjectiles
+	if (luaUI) {
+		luaUI->ExecuteProjEventBatch();
+		luaUI->ExecuteRecvFromSynced();
+	}
+}
+
+void CEventHandler::UpdateObjects() {
+	eventBatchHandler->UpdateObjects();
+}
+void CEventHandler::DeleteSyncedObjects() {
+	if (luaRules) luaRules->ExecuteRecvFromSynced();
+	if (luaGaia) luaGaia->ExecuteRecvFromSynced();
+
+	GML_STDMUTEX_LOCK(luaui); // DeleteSyncedObjects
+	if (luaUI) { 
+		luaUI->ExecuteObjEventBatch();
+		luaUI->ExecuteRecvFromSynced();
+	}
+}
+
+
+
+
 void CEventHandler::ViewResize()
 {
 	EVENTHANDLER_CHECK(ViewResize);
@@ -482,6 +540,16 @@ void CEventHandler::ViewResize()
 	for (int i = 0; i < count; i++) {
 		CEventClient* ec = listViewResize[i];
 		ec->ViewResize();
+	}
+}
+
+
+void CEventHandler::GameProgress(int gameFrame)
+{
+	const int count = listGameProgress.size();
+	for (int i = 0; i < count; i++) {
+		CEventClient* ec = listGameProgress[i];
+		ec->GameProgress(gameFrame);
 	}
 }
 
@@ -668,15 +736,27 @@ string CEventHandler::GetTooltip(int x, int y)
 }
 
 
-bool CEventHandler::AddConsoleLine(const string& msg, const CLogSubsystem& subsystem)
+bool CEventHandler::AddConsoleLine(const std::string& msg, const std::string& section, int level)
 {
 	EVENTHANDLER_CHECK(AddConsoleLine, false);
 
 	for (int i = 0; i < count; i++) {
 		CEventClient* ec = listAddConsoleLine[i];
-		ec->AddConsoleLine(msg, subsystem);
+		ec->AddConsoleLine(msg, section, level);
 	}
 	return true;
+}
+
+
+void CEventHandler::LastMessagePosition(const float3& pos)
+{
+	EVENTHANDLER_CHECK(LastMessagePosition);
+	//GML_STDMUTEX_LOCK(log); // LastMessagePosition FIXME would this be required?
+
+	for (int i = 0; i < count; i++) {
+		CEventClient* ec = listLastMessagePosition[i];
+		ec->LastMessagePosition(pos);
+	}
 }
 
 
@@ -746,3 +826,4 @@ bool CEventHandler::MapDrawCmd(int playerID, int type,
 
 /******************************************************************************/
 /******************************************************************************/
+

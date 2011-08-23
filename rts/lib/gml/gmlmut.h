@@ -10,9 +10,13 @@
 #ifndef GMLMUTEX_H
 #define GMLMUTEX_H
 
+#define GML_DRAW 1
+#define GML_SIM 2
+
 #ifdef USE_GML
 
 #include "gmlcnf.h"
+#include "System/Platform/Synchro.h"
 
 #if GML_ENABLE_SIM
 #include <boost/thread/mutex.hpp>
@@ -26,7 +30,6 @@ extern boost::mutex posmutex;
 extern boost::mutex runitmutex;
 extern boost::mutex netmutex;
 extern boost::mutex histmutex;
-extern boost::mutex logmutex;
 extern boost::mutex timemutex;
 extern boost::mutex watermutex;
 extern boost::mutex dquemutex;
@@ -44,11 +47,14 @@ extern boost::mutex olbatchmutex;
 extern boost::mutex plbatchmutex;
 extern boost::mutex glbatchmutex;
 extern boost::mutex mlbatchmutex;
+extern boost::mutex llbatchmutex;
 extern boost::mutex cmdmutex;
 extern boost::mutex luauimutex;
 extern boost::mutex xcallmutex;
 extern boost::mutex blockmutex;
 extern boost::mutex tnummutex;
+extern boost::mutex ntexmutex;
+extern boost::mutex lodmutex;
 
 #include <boost/thread/recursive_mutex.hpp>
 extern boost::recursive_mutex unitmutex;
@@ -85,23 +91,25 @@ extern gmlMutex simmutex;
 			char st##name[sizeof(ScopedTimer)];\
 			int stc##name=GML_MTXCMP(GML_QUOTE(name),gmlProfMutex);\
 			if(stc##name)\
-				new (st##name) ScopedTimer(GML_QUOTE(name ## line ## Mutex));\
+				new (st##name) ScopedTimer(" " GML_QUOTE(name ## line ## Mutex));\
 			type;\
 			if(stc##name)\
 				((ScopedTimer *)st##name)->~ScopedTimer()
 #		define GML_PROFMUTEX_LOCK(name, type, line) GML_LINEMUTEX_LOCK(name, type, line)
 #		define GML_STDMUTEX_LOCK(name) GML_PROFMUTEX_LOCK(name, GML_MUTEX_TYPE(name, mutex), __LINE__)
 #		define GML_RECMUTEX_LOCK(name) GML_PROFMUTEX_LOCK(name, GML_MUTEX_TYPE(name, recursive_mutex), __LINE__)
-#		define GML_THRMUTEX_LOCK(name,thr,...) GML_PROFMUTEX_LOCK(name, Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())), __LINE__)
+#		define GML_THRMUTEX_LOCK(name,thr) GML_PROFMUTEX_LOCK(name, Threading::RecursiveScopedLock name##lock(name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())), __LINE__)
+#		define GML_OBJMUTEX_LOCK(name,thr,...) GML_PROFMUTEX_LOCK(name, Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())), __LINE__)
 #	else
 #		define GML_PROFMUTEX_LOCK(name, type)\
 			char st##name[sizeof(ScopedTimer)];\
-			new (st##name) ScopedTimer(GML_QUOTE(name##Mutex));\
+			new (st##name) ScopedTimer(" " GML_QUOTE(name##Mutex));\
 			type;\
 			((ScopedTimer *)st##name)->~ScopedTimer()
 #		define GML_STDMUTEX_LOCK(name) GML_PROFMUTEX_LOCK(name, GML_MUTEX_TYPE(name, mutex))
 #		define GML_RECMUTEX_LOCK(name) GML_PROFMUTEX_LOCK(name, GML_MUTEX_TYPE(name, recursive_mutex))
-#		define GML_THRMUTEX_LOCK(name,thr,...) GML_PROFMUTEX_LOCK(name, Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())))
+#		define GML_THRMUTEX_LOCK(name,thr) GML_PROFMUTEX_LOCK(name, Threading::RecursiveScopedLock name##lock(name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())))
+#		define GML_OBJMUTEX_LOCK(name,thr,...) GML_PROFMUTEX_LOCK(name, Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())))
 #	endif
 #else
 #	define GML_STDMUTEX_LOCK(name) boost::mutex::scoped_lock name##lock(name##mutex)
@@ -128,11 +136,13 @@ public:
 	}
 };
 #	define GML_RECMUTEX_LOCK(name) gmlRecursiveMutexLockDebug name##lock(name##mutex, #name)
-#	define GML_THRMUTEX_LOCK(name,thr,...) Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())) // TODO
+#	define GML_THRMUTEX_LOCK(name,thr) Threading::RecursiveScopedLock name##lock(name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())) // TODO
+#	define GML_OBJMUTEX_LOCK(name,thr,...) Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread())) // TODO
 
 #else
 #	define GML_RECMUTEX_LOCK(name) boost::recursive_mutex::scoped_lock name##lock(name##mutex)
-#	define GML_THRMUTEX_LOCK(name,thr,...) Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread()))
+#	define GML_THRMUTEX_LOCK(name,thr) Threading::RecursiveScopedLock name##lock(name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread()))
+#	define GML_OBJMUTEX_LOCK(name,thr,...) Threading::RecursiveScopedLock name##lock(__VA_ARGS__ name##mutex, (((thr)&GML_DRAW) && ((thr)&GML_SIM)) || (((thr)&GML_DRAW) && !Threading::IsSimThread()) || (((thr)&GML_SIM) && Threading::IsSimThread()))
 #endif
 #endif
 class gmlMutexLock {
@@ -154,7 +164,8 @@ public:
 
 #define GML_STDMUTEX_LOCK(name)
 #define GML_RECMUTEX_LOCK(name)
-#define GML_THRMUTEX_LOCK(name,thr,...)
+#define GML_THRMUTEX_LOCK(name,thr)
+#define GML_OBJMUTEX_LOCK(name,thr,...)
 #define GML_STDMUTEX_LOCK_NOPROF(name)
 #define GML_MSTMUTEX_LOCK(name)
 #define GML_MSTMUTEX_DOLOCK(name)
@@ -162,4 +173,7 @@ public:
 
 #endif
 
+#define GML_LODMUTEX_LOCK(unit) GML_OBJMUTEX_LOCK(lod, GML_DRAW|GML_SIM, unit->)
+
 #endif
+

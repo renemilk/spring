@@ -2078,11 +2078,11 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\Rendering\Env\BaseSky.cpp"
+					RelativePath="..\..\Rendering\Env\ISky.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\Rendering\Env\BaseSky.h"
+					RelativePath="..\..\Rendering\Env\ISky.h"
 					>
 				</File>
 				<File
@@ -2094,11 +2094,11 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\Rendering\Env\BaseWater.cpp"
+					RelativePath="..\..\Rendering\Env\IWater.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\Rendering\Env\BaseWater.h"
+					RelativePath="..\..\Rendering\Env\IWater.h"
 					>
 				</File>
 				<File
@@ -3013,11 +3013,11 @@
 						>
 					</File>
 					<File
-						RelativePath="..\..\Sim\Weapons\bombdropper.cpp"
+						RelativePath="..\..\Sim\Weapons\BombDropper.cpp"
 						>
 					</File>
 					<File
-						RelativePath="..\..\Sim\Weapons\bombdropper.h"
+						RelativePath="..\..\Sim\Weapons\BombDropper.h"
 						>
 					</File>
 					<File
@@ -4123,7 +4123,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\System\tdf_grammar.hpp"
+				RelativePath="..\..\System\tdf_grammar.h"
 				>
 			</File>
 			<File
@@ -4270,15 +4270,15 @@
 				Name="FileSystem"
 				>
 				<File
-					RelativePath="..\..\System\FileSystem\Archive7Zip.cpp"
+					RelativePath="..\..\System\FileSystem\SevenZipArchive.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\Archive7Zip.h"
+					RelativePath="..\..\System\FileSystem\SevenZipArchive.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveBase.cpp"
+					RelativePath="..\..\System\FileSystem\IArchive.cpp"
 					>
 					<FileConfiguration
 						Name="Debug|Win32"
@@ -4330,23 +4330,23 @@
 					</FileConfiguration>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveBase.h"
+					RelativePath="..\..\System\FileSystem\IArchive.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveBuffered.cpp"
+					RelativePath="..\..\System\FileSystem\BufferedArchive.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveBuffered.h"
+					RelativePath="..\..\System\FileSystem\BufferedArchive.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveDir.cpp"
+					RelativePath="..\..\System\FileSystem\DirArchive.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveDir.h"
+					RelativePath="..\..\System\FileSystem\DirArchive.h"
 					>
 				</File>
 				<File
@@ -4358,19 +4358,11 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveHPI.cpp"
+					RelativePath="..\..\System\FileSystem\PoolArchive.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveHPI.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\System\FileSystem\ArchivePool.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\System\FileSystem\ArchivePool.h"
+					RelativePath="..\..\System\FileSystem\PoolArchive.h"
 					>
 				</File>
 				<File
@@ -4430,15 +4422,15 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveZip.cpp"
+					RelativePath="..\..\System\FileSystem\ZipArchive.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\ArchiveZip.h"
+					RelativePath="..\..\System\FileSystem\ZipArchive.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\CRC.cpp"
+					RelativePath="..\..\System\CRC.cpp"
 					>
 					<FileConfiguration
 						Name="Debug|Win32"
@@ -4490,7 +4482,7 @@
 					</FileConfiguration>
 				</File>
 				<File
-					RelativePath="..\..\System\FileSystem\CRC.h"
+					RelativePath="..\..\System\CRC.h"
 					>
 				</File>
 				<File
@@ -4992,11 +4984,11 @@
 				Name="Platform"
 				>
 				<File
-					RelativePath="..\..\System\Platform\BaseCmd.cpp"
+					RelativePath="..\..\System\Platform\CmdLineParams.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\Platform\BaseCmd.h"
+					RelativePath="..\..\System\Platform\CmdLineParams.h"
 					>
 				</File>
 				<File

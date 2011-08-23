@@ -5,7 +5,7 @@
 
 #include <string>
 #ifdef WIN32
-	#include <windows.h>
+	#include <windows.h> // HANDLE & DWORD
 #else
 	#include <pthread.h>
 #endif
@@ -26,8 +26,14 @@ namespace Threading {
 
 	NativeThreadHandle GetCurrentThread();
 	NativeThreadId GetCurrentThreadId();
-	bool NativeThreadIdsEqual(const NativeThreadId& thID1, const NativeThreadId& thID2);
-
+	inline bool NativeThreadIdsEqual(const NativeThreadId thID1, const NativeThreadId thID2)
+	{
+	#ifdef WIN32
+		return (thID1 == thID2);
+	#else
+		return pthread_equal(thID1, thID2);
+	#endif
+	}
 	void SetMainThread();
 	bool IsMainThread();
 	bool IsMainThread(NativeThreadId threadID);
@@ -41,6 +47,9 @@ namespace Threading {
 
 	void SetSimThread(bool set);
 	bool IsSimThread();
+
+	void SetBatchThread(bool set);
+	bool IsBatchThread();
 
 	void SetThreadError(const Error& err);
 	Error* GetThreadError();

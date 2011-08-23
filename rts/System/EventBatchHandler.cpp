@@ -1,16 +1,18 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "Util.h"
+#include "System/Util.h"
 #include "Sim/Projectiles/Projectile.h" // for operator delete
 
-#include "EventBatchHandler.h"
-#include "EventHandler.h"
+#include "System/EventBatchHandler.h"
+#include "System/EventHandler.h"
 
 #if UNSYNCED_PROJ_NOEVENT
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #endif
 
+#include "lib/gml/gmlcnf.h"
+#include "Rendering/Textures/S3OTextureHandler.h"
+#include "System/Platform/Threading.h"
 
 void EventBatchHandler::ProjectileCreatedDestroyedEvent::Add(const CProjectile* p) { eventHandler.RenderProjectileCreated(p); }
 void EventBatchHandler::ProjectileCreatedDestroyedEvent::Remove(const CProjectile* p) { eventHandler.RenderProjectileDestroyed(p); }
@@ -76,6 +78,9 @@ void EventBatchHandler::DeleteSyncedFeatures() {
 }
 
 void EventBatchHandler::UpdateProjectiles() {
+#if DETACH_SYNCED
+	syncedProjectileCreatedDestroyedEventBatch.delay_delete();
+#endif
 	syncedProjectileCreatedDestroyedEventBatch.delay_add();
 	unsyncedProjectileCreatedDestroyedEventBatch.delay_delete();
 	unsyncedProjectileCreatedDestroyedEventBatch.delay_add();
@@ -83,12 +88,17 @@ void EventBatchHandler::UpdateProjectiles() {
 void EventBatchHandler::UpdateDrawProjectiles() {
 	GML_STDMUTEX_LOCK(rproj); // UpdateDrawProjectiles
 
+#if DETACH_SYNCED
+	syncedProjectileCreatedDestroyedEventBatch.delete_delayed();
+#endif
 	syncedProjectileCreatedDestroyedEventBatch.add_delayed();
 	unsyncedProjectileCreatedDestroyedEventBatch.delete_delayed();
 	unsyncedProjectileCreatedDestroyedEventBatch.add_delayed();
 }
 void EventBatchHandler::DeleteSyncedProjectiles() {
+#if !DETACH_SYNCED
 	syncedProjectileCreatedDestroyedEventBatch.remove_erased_synced();
+#endif
 }
 
 void EventBatchHandler::UpdateObjects() {
@@ -107,4 +117,12 @@ void EventBatchHandler::UpdateObjects() {
 
 		UpdateProjectiles();
 	}
+}
+
+void EventBatchHandler::LoadedModelRequested() {
+#if defined(USE_GML) && GML_ENABLE_SIM && GML_SHARE_LISTS 
+	// Make sure the requested model is available to the calling thread
+	if (!Threading::IsSimThread()) 
+		texturehandlerS3O->UpdateDraw();
+#endif
 }

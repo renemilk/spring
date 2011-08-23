@@ -1,8 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <algorithm>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "GrassDrawer.h"
 #include "Game/Camera.h"
@@ -12,20 +11,21 @@
 #include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/ShadowHandler.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/FBO.h"
 #include "Rendering/GL/VertexArray.h"
-#include "Rendering/Shaders/ShaderHandler.hpp"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/ShaderHandler.h"
+#include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Sim/Misc/Wind.h"
 #include "System/myMath.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/Exceptions.h"
-#include "System/GlobalUnsynced.h"
 #include "System/Util.h"
 #include "System/FileSystem/FileHandler.h"
+
+CONFIG(int, GrassDetail).defaultValue(3);
 
 static const float turfSize        = 20.0f;            // single turf size
 static const float partTurfSize    = turfSize * 0.6f;  // single turf size
@@ -44,7 +44,7 @@ inline float fRand(float size)
 
 CGrassDrawer::CGrassDrawer()
 {
-	const int detail = configHandler->Get("GrassDetail", 3);
+	const int detail = configHandler->GetInt("GrassDetail");
 
 	if (detail == 0) {
 		grassOff = true;
@@ -59,7 +59,7 @@ CGrassDrawer::CGrassDrawer()
 	if (grassdata) {
 		if (grassbm.width != gs->mapx / grassSquareSize || grassbm.height != gs->mapy / grassSquareSize) {
 			char b[128];
-			SNPRINTF(b, sizeof(b), "grass-map has wrong size (%dx%d, should be %dx%d)\n", 
+			SNPRINTF(b, sizeof(b), "grass-map has wrong size (%dx%d, should be %dx%d)\n",
 				grassbm.width, grassbm.height, gs->mapx / 4, gs->mapy / 4);
 			throw std::runtime_error(b);
 		}
@@ -259,7 +259,7 @@ public:
 				for (int x2 = 0; x2 < grassBlockSize; ++x2) { //!loop over all squares in block
 					if (*gm) {
 						float3 squarePos((xgbsx + 0.5f) * gSSsq, 0.0f, (ygbsy + 0.5f) * gSSsq);
-							squarePos.y = ground->GetHeightReal(squarePos.x, squarePos.z);
+							squarePos.y = ground->GetHeightReal(squarePos.x, squarePos.z, false);
 
 						/*if (!camera->InView(squarePos, gSSsq * 2.0f)) { //the QuadField visibility check should be enough
 							// double the radius of the check, grass on the left of
@@ -281,8 +281,8 @@ public:
 								const float dy = (ygbsy + fRand(1)) * gSSsq;
 								const float col = 0.62f;
 
-								float3 pos(dx, ground->GetHeightReal(dx, dy), dy);
-									pos.y -= ground->GetSlope(dx, dy) * 10.0f + 0.03f;
+								float3 pos(dx, ground->GetHeightReal(dx, dy, false), dy);
+									pos.y -= ground->GetSlope(dx, dy, false) * 10.0f + 0.03f;
 
 								glColor3f(col, col, col);
 
@@ -347,7 +347,7 @@ public:
 
 			if (!grass->va) {
 				grass->va = new CVertexArray;;
-				grass->pos = float3((x + 0.5f) * bMSsq, ground->GetHeightReal((x + 0.5f) * bMSsq, (y + 0.5f) * bMSsq), (y + 0.5f) * bMSsq);
+				grass->pos = float3((x + 0.5f) * bMSsq, ground->GetHeightReal((x + 0.5f) * bMSsq, (y + 0.5f) * bMSsq, false), (y + 0.5f) * bMSsq);
 
 				va = grass->va;
 				va->Initialize();
@@ -376,8 +376,8 @@ public:
 								const float dy = (ygbsy + fRand(1)) * gSSsq;
 								const float col = 1.0f;
 
-								float3 pos(dx, ground->GetHeightReal(dx, dy) + 0.5f, dy);
-									pos.y -= (ground->GetSlope(dx, dy) * 10.0f + 0.03f);
+								float3 pos(dx, ground->GetHeightReal(dx, dy, false) + 0.5f, dy);
+									pos.y -= (ground->GetSlope(dx, dy, false) * 10.0f + 0.03f);
 
 								va->AddVertexQTN(pos, 0.0f,         0.0f, float3(-partTurfSize, -partTurfSize, col));
 								va->AddVertexQTN(pos, 1.0f / 16.0f, 0.0f, float3( partTurfSize, -partTurfSize, col));
@@ -454,7 +454,7 @@ void CGrassDrawer::Draw(void)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC_ARB, GL_LEQUAL);
 		glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_TEXTURE_MODE_ARB, GL_ALPHA);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FAIL_VALUE_ARB, 1.0f - sky->GetLight()->GetGroundShadowDensity());
-		
+
 		static const float texConstant[] = {
 			mapInfo->light.groundAmbientColor.x * 1.24f,
 			mapInfo->light.groundAmbientColor.y * 1.24f,
@@ -664,7 +664,7 @@ void CGrassDrawer::Draw(void)
 
 		if (grassMap[y * gs->mapx / grassSquareSize + x]) {
 			float3 squarePos((x + 0.5f) * gSSsq, 0.0f, (y + 0.5f) * gSSsq);
-				squarePos.y = ground->GetHeightReal(squarePos.x, squarePos.z);
+				squarePos.y = ground->GetHeightReal(squarePos.x, squarePos.z, false);
 			const float3 billboardDirZ = (squarePos - camera->pos).ANormalize();
 			const float3 billboardDirX = (billboardDirZ.cross(UpVector)).ANormalize();
 			const float3 billboardDirY = billboardDirX.cross(billboardDirZ);
@@ -698,8 +698,8 @@ void CGrassDrawer::Draw(void)
 				const float dy = (y + fRand(1)) * gSSsq;
 				const float col = 1.0f;
 
-				float3 pos(dx, ground->GetHeightReal(dx, dy) + 0.5f, dy);
-					pos.y -= (ground->GetSlope(dx, dy) * 10.0f + 0.03f);
+				float3 pos(dx, ground->GetHeightReal(dx, dy, false) + 0.5f, dy);
+					pos.y -= (ground->GetSlope(dx, dy, false) * 10.0f + 0.03f);
 
 				if (camera->InView(pos, turfSize * 0.7f)) {
 					va->AddVertexQTN(pos,         0.0f, 0.0f, float3(-partTurfSize, -partTurfSize, col));
@@ -901,7 +901,7 @@ void CGrassDrawer::CreateFarTex(void)
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_FOG);
 	glDisable(GL_BLEND);
-	glColor4f(1,1,1,1);			
+	glColor4f(1,1,1,1);
 	glViewport(0,0,256*sizeMod,256*sizeMod);
 
 	for(int a=0;a<16;++a){
@@ -917,7 +917,7 @@ void CGrassDrawer::CreateFarTex(void)
 		glOrtho(-partTurfSize, partTurfSize, -partTurfSize, partTurfSize, -turfSize, turfSize);
 
 		glCallList(grassDL);
-		
+
 		glReadPixels(0,0,256*sizeMod,256*sizeMod,GL_RGBA,GL_UNSIGNED_BYTE,buf2);
 
 //		CBitmap bm(buf2,512,512);

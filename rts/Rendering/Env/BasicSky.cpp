@@ -4,9 +4,8 @@
 #pragma warning(disable:4258)
 #endif
 
-#include "StdAfx.h"
 #include <assert.h>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "BasicSky.h"
 
@@ -15,13 +14,12 @@
 #include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Textures/Bitmap.h"
-#include "System/ConfigHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/Matrix44f.h"
 #include "System/myMath.h"
 #include "System/TimeProfiler.h"
 
+CONFIG(bool, DynamicSky).defaultValue(false);
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -35,16 +33,39 @@
 #define CLOUD_MASK (CLOUD_SIZE-1)
 
 CBasicSky::CBasicSky()
+	: skydir1(ZeroVector)
+	, skydir2(ZeroVector)
+	, skyTex(0)
+	, skyDot3Tex(0)
+	, cloudDot3Tex(0)
+	, sunTex(0)
+	, sunFlareTex(0)
+	, skyTexUpdateIter(0)
+	, skyDomeList(0)
+	, sunFlareList(0)
+	, skyAngle(0.0f)
+	, domeheight(0.0f)
+	, domeWidth(0.0f)
+	, sunTexCoordX(0.0f)
+	, sunTexCoordY(0.0f)
+	, randMatrix(NULL)
+	, rawClouds(NULL)
+	, blendMatrix(NULL)
+	, cloudThickness(NULL)
+	, oldCoverBaseX(-5)
+	, oldCoverBaseY(0)
+	, updatecounter(0)
 {
 	sunFlareList = glGenLists(1);
 	skytexpart = new unsigned char[512][4];
-	skyTexUpdateIter = 0;
+
+	memset(alphaTransform, 0, 1024);
+	memset(thicknessTransform, 0, 1024);
+	memset(covers, 0, 4 * 32 * sizeof(float));
 
 	randMatrix=newmat3<int>(16,32,32);
 	rawClouds=newmat2<int>(CLOUD_SIZE,CLOUD_SIZE);
 	blendMatrix=newmat3<int>(CLOUD_DETAIL,32,32);
-
-	updatecounter=0;
 
 	domeheight=cos(PI/16)*1.01f;
 	domeWidth=sin(PI/16)*400*1.7f;
@@ -67,9 +88,7 @@ CBasicSky::CBasicSky()
 
 	dynamicSky = true;
 	CreateClouds();
-	dynamicSky = configHandler->Get("DynamicSky", false);
-
-	oldCoverBaseX=-5;
+	dynamicSky = configHandler->GetBool("DynamicSky");
 
 	CreateSkyDomeList();
 }
@@ -231,7 +250,7 @@ void CBasicSky::Draw()
 
 	glEnable(GL_DEPTH_TEST);
 
-	SetFog();
+	ISky::SetupFog();
 }
 
 float3 CBasicSky::GetCoord(int x, int y)
@@ -340,7 +359,7 @@ void CBasicSky::Update()
 	if (!dynamicSky)
 		return;
 
-	SCOPED_TIMER("Sky Update");
+	SCOPED_TIMER("BasicSky::Update");
 
 	static int kernel[CLOUD_SIZE/4*CLOUD_SIZE/4];
 

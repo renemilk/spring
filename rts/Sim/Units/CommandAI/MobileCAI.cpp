@@ -1,35 +1,31 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "MobileCAI.h"
 #include "TransportCAI.h"
 #include "ExternalAI/EngineOutHandler.h"
-#include "LineDrawer.h"
-#include "Sim/Units/Groups/Group.h"
 #include "Game/GameHelper.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/SelectedUnits.h"
-#include "Game/UI/CommandColors.h"
 #include "Map/Ground.h"
 #include "Sim/Misc/AirBaseHandler.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/MoveTypes/MoveType.h"
-#include "Sim/MoveTypes/TAAirMoveType.h"
-#include "Sim/MoveTypes/AirMoveType.h"
+#include "Sim/MoveTypes/HoverAirMoveType.h"
+#include "Sim/MoveTypes/StrafeAirMoveType.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitHandler.h"
+#include "Sim/Units/Groups/Group.h"
 #include "Sim/Units/UnitTypes/TransportUnit.h"
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
-#include "Sim/Weapons/DGunWeapon.h"
-#include "LogOutput.h"
-#include "myMath.h"
+#include "System/Log/ILog.h"
+#include "System/myMath.h"
+#include "System/Util.h"
 #include <assert.h>
-#include "Util.h"
-#include "GlobalUnsynced.h"
 
 #define BUGGER_OFF_TTL 200
 #define MAX_CLOSE_IN_RETRY_TICKS 30
@@ -504,8 +500,9 @@ void CMobileCAI::ExecutePatrol(Command &c)
 {
 	assert(owner->unitDef->canPatrol);
 	if (c.params.size() < 3) {
-		logOutput.Print("Error: got patrol cmd with less than 3 params on %s in MobileCAI",
-			owner->unitDef->humanName.c_str());
+		LOG_L(L_ERROR,
+				"Received a Patrol command with less than 3 params on %s in MobileCAI",
+				owner->unitDef->humanName.c_str());
 		return;
 	}
 	Command temp(CMD_FIGHT, c.options | INTERNAL_ORDER);
@@ -548,8 +545,9 @@ void CMobileCAI::ExecuteFight(Command &c)
 		tempOrder = false;
 	}
 	if (c.params.size() < 3) {
-		logOutput.Print("Error: got fight cmd with less than 3 params on %s in MobileCAI",
-			owner->unitDef->humanName.c_str());
+		LOG_L(L_ERROR,
+				"Received a Fight command with less than 3 params on %s in MobileCAI",
+				owner->unitDef->humanName.c_str());
 		return;
 	}
 	if(c.params.size() >= 6){
@@ -641,7 +639,7 @@ void CMobileCAI::ExecuteGuard(Command &c)
 		StopSlowGuard();
 		SlowUpdate();
 	} else {
-		const float3 dif = (guardee->pos - owner->pos).Normalize();
+		const float3 dif = (guardee->pos - owner->pos).SafeNormalize();
 		const float3 goal = guardee->pos - dif * (guardee->radius + owner->radius + 64.0f);
 		const bool resetGoal =
 			((goalPos - goal).SqLength2D() > 1600.0f) ||
@@ -664,29 +662,15 @@ void CMobileCAI::ExecuteGuard(Command &c)
 	}
 }
 
-/**
-* @brief Executes the stop command c
-*/
+
 void CMobileCAI::ExecuteStop(Command &c)
 {
 	StopMove();
 	return CCommandAI::ExecuteStop(c);
 }
 
-/**
-* @brief Executes the DGun command c
-*/
-void CMobileCAI::ExecuteDGun(Command &c)
-{
-	ExecuteAttack(c);
-}
 
 
-
-
-/**
-* @brief Causes this CMobileCAI to execute the attack order c
-*/
 void CMobileCAI::ExecuteAttack(Command &c)
 {
 	assert(owner->unitDef->canAttack);
@@ -754,27 +738,35 @@ void CMobileCAI::ExecuteAttack(Command &c)
 
 	// user clicked on enemy unit (note that we handle aircrafts slightly differently)
 	if (orderTarget) {
-		//bool b1 = owner->AttackUnit(orderTarget, c.id == CMD_DGUN);
 		bool b2 = false;
 		bool b3 = false;
 		bool b4 = false;
 		float edgeFactor = 0.f; // percent offset to target center
 		float3 diff = owner->pos - orderTarget->midPos;
 
-		if (owner->weapons.size() > 0) {
+		if (!owner->weapons.empty()) {
 			if (!(c.options & ALT_KEY) && SkipParalyzeTarget(orderTarget)) {
 				StopMove();
 				FinishCommand();
 				return;
 			}
+
 			CWeapon* w = owner->weapons.front();
+
+			if (c.GetID() == CMD_MANUALFIRE) {
+				assert(owner->unitDef->canManualFire);
+				for (vector<CWeapon*>::iterator it = owner->weapons.begin(); it != owner->weapons.end(); ++it) {
+					if ((*it)->weaponDef->manualfire) {
+						w = *it; break;
+					}
+				}
+			}
+
 			// if we have at least one weapon then check if we
 			// can hit target with our first (meanest) one
-			b2 = w->TryTargetRotate(orderTarget, c.GetID() == CMD_DGUN);
-			b3 = Square(w->range - (w->relWeaponPos).Length())
-					> (orderTarget->pos.SqDistance(owner->pos));
-			b4 = w->TryTargetHeading(GetHeadingFromVector(-diff.x, -diff.z),
-					orderTarget->pos, orderTarget != NULL, orderTarget);
+			b2 = w->TryTargetRotate(orderTarget, c.GetID() == CMD_MANUALFIRE);
+			b3 = Square(w->range - (w->relWeaponPos).Length()) > (orderTarget->pos.SqDistance(owner->pos));
+			b4 = w->TryTargetHeading(GetHeadingFromVector(-diff.x, -diff.z), orderTarget->pos, orderTarget != NULL, orderTarget);
 			edgeFactor = fabs(w->targetBorder);
 		}
 
@@ -802,7 +794,7 @@ void CMobileCAI::ExecuteAttack(Command &c)
 								owner->maxRange * 0.9f), true);
 				}
 			}
-			owner->AttackUnit(orderTarget, c.GetID() == CMD_DGUN);
+			owner->AttackUnit(orderTarget, c.GetID() == CMD_MANUALFIRE);
 		}
 
 		// if we're on hold pos in a temporary order, then none of the close-in
@@ -813,11 +805,11 @@ void CMobileCAI::ExecuteAttack(Command &c)
 			return;
 		}
 
-		// if ((our movetype has type TAAirMoveType and length of 2D vector from us to target
+		// if ((our movetype has type HoverAirMoveType and length of 2D vector from us to target
 		// less than 90% of our maximum range) OR squared length of 2D vector from us to target
 		// less than 1024) then we are close enough
 		else if(diffLength2d < (owner->maxRange * 0.9f)){
-			if (dynamic_cast<CTAAirMoveType*>(owner->moveType)
+			if (dynamic_cast<CHoverAirMoveType*>(owner->moveType)
 					|| (diff.SqLength2D() < 1024))
 			{
 				StopMove();
@@ -870,35 +862,35 @@ void CMobileCAI::ExecuteAttack(Command &c)
 		const float3 pos(c.params[0], c.params[1], c.params[2]);
 		const float3 diff = owner->pos - pos;
 
-		if (owner->weapons.size() > 0) {
+		if (!owner->weapons.empty()) {
 			// if we have at least one weapon then check if
 			// we can hit position with our first (assumed
 			// to be meanest) one
 			CWeapon* w = owner->weapons.front();
 
-			// XXX hack - dgun overrides any checks
-			if (c.GetID() == CMD_DGUN) {
+			// XXX HACK - special weapon overrides any checks
+			if (c.GetID() == CMD_MANUALFIRE) {
+				assert(owner->unitDef->canManualFire);
 				float rr = owner->maxRange * owner->maxRange;
 
-				for (vector<CWeapon*>::iterator it = owner->weapons.begin();
-						it != owner->weapons.end(); ++it) {
-
-					if (dynamic_cast<CDGunWeapon*>(*it))
-						rr = (*it)->range * (*it)->range;
+				for (vector<CWeapon*>::iterator it = owner->weapons.begin(); it != owner->weapons.end(); ++it) {
+					if ((*it)->weaponDef->manualfire) {
+						rr = (*it)->range * (*it)->range; break;
+					}
 				}
 
 				if (diff.SqLength() < rr) {
 					StopMove();
-					owner->AttackGround(pos, c.GetID() == CMD_DGUN);
+					owner->AttackGround(pos, c.GetID() == CMD_MANUALFIRE);
 					owner->moveType->KeepPointingTo(pos, owner->maxRange * 0.9f, true);
 				}
 			} else {
-				const bool inAngle = w->TryTargetRotate(pos, c.GetID() == CMD_DGUN);
+				const bool inAngle = w->TryTargetRotate(pos, c.GetID() == CMD_MANUALFIRE);
 				const bool inRange = diff.SqLength2D() < Square(w->range - (w->relWeaponPos).Length2D());
 
 				if (inAngle || inRange) {
 					StopMove();
-					owner->AttackGround(pos, c.GetID() == CMD_DGUN);
+					owner->AttackGround(pos, c.GetID() == CMD_MANUALFIRE);
 					owner->moveType->KeepPointingTo(pos, owner->maxRange * 0.9f, true);
 				}
 			}
@@ -960,85 +952,9 @@ void CMobileCAI::StopMove()
 	goalPos = owner->pos;
 }
 
-void CMobileCAI::DrawCommands(void)
-{
-	lineDrawer.StartPath(owner->drawMidPos, cmdColors.start);
-
-	if (owner->selfDCountdown != 0) {
-		lineDrawer.DrawIconAtLastPos(CMD_SELFD);
-	}
-
-	CCommandQueue::iterator ci;
-	for (ci = commandQue.begin(); ci != commandQue.end(); ++ci) {
-		const int& cmd_id = ci->GetID();
-		switch (cmd_id) {
-			case CMD_MOVE: {
-				const float3 endPos(ci->params[0], ci->params[1], ci->params[2]);
-				lineDrawer.DrawLineAndIcon(cmd_id, endPos, cmdColors.move);
-				break;
-			}
-			case CMD_PATROL: {
-				const float3 endPos(ci->params[0], ci->params[1], ci->params[2]);
-				lineDrawer.DrawLineAndIcon(cmd_id, endPos, cmdColors.patrol);
-				break;
-			}
-			case CMD_FIGHT: {
-				if (ci->params.size() != 1) {
-					const float3 endPos(ci->params[0], ci->params[1], ci->params[2]);
-					lineDrawer.DrawLineAndIcon(cmd_id, endPos, cmdColors.fight);
-					break;
-				}
-			}
-			case CMD_ATTACK:
-			case CMD_DGUN: {
-				if (ci->params.size() == 1) {
-					const CUnit* unit = uh->GetUnit(ci->params[0]);
-
-					if ((unit != NULL) && isTrackable(unit)) {
-						const float3 endPos = helper->GetUnitErrorPos(unit, owner->allyteam);
-						lineDrawer.DrawLineAndIcon(cmd_id, endPos, cmdColors.attack);
-					}
-				}
-				else if (ci->params.size() >= 3) {
-					const float3 endPos(ci->params[0], ci->params[1], ci->params[2]);
-					lineDrawer.DrawLineAndIcon(cmd_id, endPos, cmdColors.attack);
-				}
-				break;
-			}
-			case CMD_GUARD: {
-				const CUnit* unit = uh->GetUnit(ci->params[0]);
-
-				if ((unit != NULL) && isTrackable(unit)) {
-					const float3 endPos =
-						helper->GetUnitErrorPos(unit, owner->allyteam);
-					lineDrawer.DrawLineAndIcon(cmd_id, endPos, cmdColors.guard);
-				}
-				break;
-			}
-			case CMD_LOAD_ONTO: {
-				const CUnit* unit = uh->GetUnitUnsafe(ci->params[0]);
-				lineDrawer.DrawLineAndIcon(cmd_id, unit->pos, cmdColors.load);
-				break;
-			}
-			case CMD_WAIT: {
-				DrawWaitIcon(*ci);
-				break;
-			}
-			case CMD_SELFD: {
-				lineDrawer.DrawIconAtLastPos(cmd_id);
-				break;
-			}
-			default: {
-				DrawDefaultCommand(*ci);
-				break;
-			}
-		}
-	}
-	lineDrawer.FinishPath();
-}
 
 
-void CMobileCAI::BuggerOff(float3 pos, float radius)
+void CMobileCAI::BuggerOff(const float3& pos, float radius)
 {
 	if(radius < 0.0f) {
 		lastBuggerOffTime = gs->frameNum - BUGGER_OFF_TTL;
@@ -1049,17 +965,17 @@ void CMobileCAI::BuggerOff(float3 pos, float radius)
 	buggerOffRadius = radius + owner->radius;
 }
 
-void CMobileCAI::NonMoving(void)
+void CMobileCAI::NonMoving()
 {
 	if (owner->usingScriptMoveType) {
 		return;
 	}
-	if(lastBuggerOffTime > gs->frameNum - BUGGER_OFF_TTL){
-		float3 dif=owner->pos-buggerOffPos;
-		dif.y=0;
+	if (lastBuggerOffTime > gs->frameNum - BUGGER_OFF_TTL) {
+		float3 dif = owner->pos-buggerOffPos;
+		dif.y = 0.0f;
 		float length=dif.Length();
-		if(!length) {
-			length=0.1f;
+		if (!length) {
+			length = 0.1f;
 			dif = float3(0.1f, 0.0f, 0.0f);
 		}
 		if (length < buggerOffRadius) {
@@ -1076,7 +992,7 @@ void CMobileCAI::NonMoving(void)
 	}
 }
 
-void CMobileCAI::FinishCommand(void)
+void CMobileCAI::FinishCommand()
 {
 	if (!(commandQue.front().options & INTERNAL_ORDER)) {
 		lastUserGoal = owner->pos;
@@ -1085,7 +1001,7 @@ void CMobileCAI::FinishCommand(void)
 	CCommandAI::FinishCommand();
 }
 
-void CMobileCAI::IdleCheck(void)
+void CMobileCAI::IdleCheck()
 {
 	if (owner->unitDef->canAttack && owner->fireState > FIRESTATE_HOLDFIRE
 			&& !owner->weapons.empty() && owner->haveTarget) {
@@ -1145,7 +1061,7 @@ void CMobileCAI::IdleCheck(void)
 	}
 	lastIdleCheck = gs->frameNum;
 	if (((owner->pos - lastUserGoal).SqLength2D() > 10000.0f) &&
-	    !owner->haveTarget && !dynamic_cast<CTAAirMoveType*>(owner->moveType)) {
+	    !owner->haveTarget && !dynamic_cast<CHoverAirMoveType*>(owner->moveType)) {
 		//note that this is not internal order so that we dont keep generating
 		//new orders if we cant get to that pos
 		Command c(CMD_MOVE);

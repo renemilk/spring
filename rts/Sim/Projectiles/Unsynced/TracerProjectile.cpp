@@ -1,11 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "TracerProjectile.h"
 #include "Rendering/GL/myGL.h"
-#include "GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CTracerProjectile, CProjectile, )
 
@@ -24,21 +22,24 @@ CR_REG_METADATA(CTracerProjectile,
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-CTracerProjectile::CTracerProjectile(const float3 pos, const float3 speed, const float range, CUnit* owner):
+CTracerProjectile::CTracerProjectile(const float3& pos, const float3& speed, const float range, CUnit* owner):
 	CProjectile(pos, speed, owner, false, false, false)
+	, length(range)
+	, drawLength(0.0f)
 {
 	SetRadius(1);
+	checkCol = false;
+
 	speedf = this->speed.Length();
 	dir = this->speed / speedf;
-	length = range;
-	drawLength = 0;
-	checkCol = false;
 }
 
 CTracerProjectile::CTracerProjectile()
+	: speedf(0.0f)
+	, length(0.0f)
+	, drawLength(0.0f)
+	, dir(ZeroVector)
 {
-	speedf = 0.0f;
-	length=drawLength = 0.0f;
 	checkCol = false;
 }
 

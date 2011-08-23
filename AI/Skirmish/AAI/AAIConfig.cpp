@@ -1,7 +1,7 @@
 // -------------------------------------------------------------------------
 // AAI
 //
-// A skirmish AI for the TA Spring engine.
+// A skirmish AI for the Spring engine.
 // Copyright Alexander Seizinger
 //
 // Released under GPL license: see LICENSE.html for more information.
@@ -165,7 +165,7 @@ void AAIConfig::LoadConfig(AAI *ai)
 	const UnitDef *def;
 
 	bool error = false;
-	bool loaded = false;
+//	bool loaded = false;
 
 	if(file)
 	{
@@ -613,7 +613,7 @@ void AAIConfig::LoadConfig(AAI *ai)
 		}
 		else
 		{
-			loaded = true;
+//			loaded = true;
 			fclose(file);
 			fprintf(ai->file, "Mod config file loaded\n");
 		}

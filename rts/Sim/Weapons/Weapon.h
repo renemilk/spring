@@ -5,9 +5,9 @@
 
 #include <list>
 
-#include "Object.h"
+#include "System/Object.h"
 #include "Sim/Misc/DamageArray.h"
-#include "float3.h"
+#include "System/float3.h"
 
 class CUnit;
 class CWeaponProjectile;
@@ -32,7 +32,8 @@ public:
 
 	void DependentDied(CObject* o);
 
-	virtual bool TryTarget(const float3 &pos,bool userTarget,CUnit* unit);
+	bool HaveFreeLineOfFire(const float3& pos, const float3& dir, float length, const CUnit* target) const;
+	virtual bool TryTarget(const float3& pos, bool userTarget,CUnit* unit);
 	bool TryTarget(CUnit* unit, bool userTarget);
 	bool TryTargetRotate(CUnit* unit, bool userTarget);
 	bool TryTargetRotate(float3 pos, bool userTarget);
@@ -102,7 +103,7 @@ public:
 	float predictSpeedMod;					// how the weapon predicts the speed of the units goes -> 1 when experience increases
 
 	float metalFireCost;
-	float energyFireCost;					// part of unit supply used to fire a salvo (transformed by unitloader)
+	float energyFireCost;
 
 	int fireSoundId;
 	float fireSoundVolume;

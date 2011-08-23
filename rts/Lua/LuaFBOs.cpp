@@ -1,10 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include <map>
-using std::map;
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaFBOs.h"
 
@@ -18,7 +15,10 @@ using std::map;
 #include "LuaRBOs.h"
 #include "LuaTextures.h"
 
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
+
+#include <map>
+using std::map;
 
 
 /******************************************************************************/
@@ -178,7 +178,7 @@ int LuaFBOs::meta_newindex(lua_State* L)
 			glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT, &currentFBO);
 			glBindFramebufferEXT(fbo->target, fbo->id);
 			if (lua_isnumber(L, 3)) {
-				const GLenum buffer = (GLenum)lua_tonumber(L, 3);
+				const GLenum buffer = (GLenum)lua_toint(L, 3);
 				glReadBuffer(buffer);
 			}
 			glBindFramebufferEXT(fbo->target, currentFBO);
@@ -318,11 +318,11 @@ bool LuaFBOs::ApplyAttachment(lua_State* L, int index,
 	GLint  level  = 0;
 
 	lua_rawgeti(L, table, 2);
-	if (lua_isnumber(L, -1)) { target = (GLenum)lua_tonumber(L, -1); }
+	if (lua_isnumber(L, -1)) { target = (GLenum)lua_toint(L, -1); }
 	lua_pop(L, 1);
 
 	lua_rawgeti(L, table, 3);
-	if (lua_isnumber(L, -1)) { level = (GLint)lua_tonumber(L, -1); }
+	if (lua_isnumber(L, -1)) { level = (GLint)lua_toint(L, -1); }
 	lua_pop(L, 1);
 
 	lua_rawgeti(L, table, 1);
@@ -336,7 +336,7 @@ bool LuaFBOs::ApplyAttachment(lua_State* L, int index,
 bool LuaFBOs::ApplyDrawBuffers(lua_State* L, int index)
 {
 	if (lua_isnumber(L, index)) {
-		const GLenum buffer = (GLenum)lua_tonumber(L, index);
+		const GLenum buffer = (GLenum)lua_toint(L, index);
 		glDrawBuffer(buffer);
 		return true;
 	}
@@ -377,7 +377,7 @@ int LuaFBOs::CreateFBO(lua_State* L)
 	if (lua_istable(L, table)) {
 		lua_getfield(L, table, "target");
 		if (lua_isnumber(L, -1)) {
-			fbo.target = (GLenum)lua_tonumber(L, -1);
+			fbo.target = (GLenum)lua_toint(L, -1);
 		} else {
 			lua_pop(L, 1);
 		}
@@ -492,7 +492,7 @@ int LuaFBOs::ActiveFBO(lua_State* L)
 	// target and matrix manipulation options
 	GLenum target = fbo->target;
 	if (lua_israwnumber(L, funcIndex)) {
-		target = (GLenum)lua_tonumber(L, funcIndex);
+		target = (GLenum)lua_toint(L, funcIndex);
 		funcIndex++;
 	}
 	bool identities = false;
@@ -531,8 +531,8 @@ int LuaFBOs::ActiveFBO(lua_State* L)
 	glPopAttrib();
 
 	if (error != 0) {
-		logOutput.Print("gl.ActiveFBO: error(%i) = %s",
-		                error, lua_tostring(L, -1));
+		LOG_L(L_ERROR, "gl.ActiveFBO: error(%i) = %s",
+				error, lua_tostring(L, -1));
 		lua_error(L);
 	}
 

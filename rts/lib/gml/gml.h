@@ -10,18 +10,16 @@
 #ifndef GML_H
 #define GML_H
 
-#define GML_DRAW 1
-#define GML_SIM 2
-
 #if defined USE_GML_SIM && !defined USE_GML
 #error USE_GML_SIM requires USE_GML
 #endif
 
-#define GML_MUTEX_PROFILER 0 // enables profiler
+#define GML_MUTEX_PROFILER 0 // enables mutex profiler
 
 #ifdef USE_GML
 #define GML_MUTEX_PROFILE 0 // detailed profiling of specific mutex
 extern const char *gmlProfMutex;
+#define GML_PROC_PROFILER 0 // enables gmlprocessor profiler
 
 #include <set>
 #include <map>
@@ -33,6 +31,17 @@ extern const char *gmlProfMutex;
 extern gmlQueue gmlQueues[GML_MAX_NUM_THREADS];
 
 #include "gmlfun.h"
+
+#if GML_PROC_PROFILER
+	extern int gmlProcNumLoop;
+	extern int gmlProcInterval;
+	#define GML_PROFILER(name) \
+	name && (globalRendering->drawFrame & gmlProcInterval);\
+	SCOPED_TIMER(!name ? "NoProc" : ((name && (globalRendering->drawFrame & gmlProcInterval)) ? " " GML_QUOTE(name) "MTProc" : " " GML_QUOTE(name) "Proc"));\
+	for(int i = 0; i < (name ? gmlProcNumLoop : 1); ++i)
+#else
+	#define GML_PROFILER(name) name;
+#endif
 
 extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_VERTEX;
 extern gmlSingleItemServer<GLhandleARB, GLhandleARB (*)(void)> gmlShaderServer_FRAGMENT;
@@ -190,7 +199,7 @@ inline unsigned gmlGetTicks() {
 	extern volatile int gmlMultiThreadSim, gmlStartSim;\
 	if(gmlThreadNumber != GML_SIM_THREAD_NUM && gmlMultiThreadSim && gmlStartSim) {\
 		lua_State *currentLuaState = gmlCurrentLuaStates[gmlThreadNumber];\
-		logOutput.Print("GML error: Draw thread created ExpGenSpawnable (%s)", GML_CURRENT_LUA(currentLuaState));\
+		LOG_SL("GML", L_ERROR, "Draw thread created ExpGenSpawnable (%s)", GML_CURRENT_LUA(currentLuaState));\
 		if(currentLuaState) luaL_error(currentLuaState,"Invalid call");\
 	}
 #define GML_CALL_DEBUGGER() gmlCallDebugger gmlCDBG(L);
@@ -227,7 +236,8 @@ inline unsigned gmlGetTicks() {
 
 #define GML_STDMUTEX_LOCK(name)
 #define GML_RECMUTEX_LOCK(name)
-#define GML_THRMUTEX_LOCK(name,thr,...)
+#define GML_THRMUTEX_LOCK(name,thr)
+#define GML_OBJMUTEX_LOCK(name,thr,...)
 #define GML_STDMUTEX_LOCK_NOPROF(name)
 #define GML_MSTMUTEX_LOCK(name)
 #define GML_MSTMUTEX_DOLOCK(name)

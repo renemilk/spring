@@ -15,10 +15,17 @@
 #
 # Functions and macros defined in this file:
 # * FixLibName
+# * CreateInstallTarget
+# * RemoveString
+# * RemoveFlag
 # * SetGlobal
+# * MakeGlobal
 # * GetListOfSubModules
 # * GetVersionFromFile
 # * GetLastPathPart
+# * MakeAbsolute
+# * GetVersionPlusDepFile
+# * GetNativeSourcesRecursive
 # * CheckMinCMakeVersion
 #
 
@@ -119,6 +126,23 @@ macro    (CreateInstallTarget targetName var_list_depends var_list_instDirs)
 endmacro (CreateInstallTarget targetName)
 
 
+# Removes a given string from a variable
+macro    (RemoveString var str)
+	String(REPLACE "${str}" "" ${var} "${${var}}")
+endmacro (RemoveString)
+
+
+# Removes a compiler flag from all commonly used vars used for that purpose
+macro    (RemoveFlag flag)
+	RemoveString(CMAKE_CXX_FLAGS "${flag}")
+	RemoveString(CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE} "${flag}")
+	RemoveString(CMAKE_C_FLAGS "${flag}")
+	RemoveString(CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE} "${flag}")
+	RemoveString(CMAKE_EXE_LINKER_FLAGS "${flag}")
+	RemoveString(CMAKE_MODULE_LINKER_FLAGS "${flag}")
+endmacro (RemoveFlag)
+
+
 # Sets a variable in global scope
 function    (SetGlobal var value)
 	set(${var} "${value}" CACHE INTERNAL "" FORCE)
@@ -212,7 +236,7 @@ macro    (GetNativeSourcesRecursive _var _dir _relDir)
 endmacro (GetNativeSourcesRecursive _var _dir _relDir)
 
 
-
+# Check if the CMake version used is >= "major.minor.patch".
 macro    (CheckMinCMakeVersion res_var major minor patch)
 	SET(${res_var} FALSE)
 	IF     (${CMAKE_MAJOR_VERSION} GREATER ${major})

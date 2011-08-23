@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef _SKIRMISHAICALLBACK_H
-#define	_SKIRMISHAICALLBACK_H
+#ifndef S_SKIRMISH_AI_CALLBACK_H
+#define	S_SKIRMISH_AI_CALLBACK_H
 
 #include "aidefines.h"
 
@@ -739,8 +739,14 @@ struct SSkirmishAICallback {
 
 	float             (CALLING_CONV *UnitDef_getVerticalSpeed)(int skirmishAIId, int unitDefId);
 
+	/**
+	 * @deprecated
+	 */
 	bool              (CALLING_CONV *UnitDef_isAbleToCrash)(int skirmishAIId, int unitDefId);
 
+	/**
+	 * @deprecated
+	 */
 	bool              (CALLING_CONV *UnitDef_isHoverAttack)(int skirmishAIId, int unitDefId);
 
 	bool              (CALLING_CONV *UnitDef_isAirStrafe)(int skirmishAIId, int unitDefId);
@@ -855,7 +861,7 @@ struct SSkirmishAICallback {
 
 	bool              (CALLING_CONV *UnitDef_isTargetingFacility)(int skirmishAIId, int unitDefId);
 
-	bool              (CALLING_CONV *UnitDef_isAbleToDGun)(int skirmishAIId, int unitDefId);
+	bool              (CALLING_CONV *UnitDef_canManualFire)(int skirmishAIId, int unitDefId);
 
 	bool              (CALLING_CONV *UnitDef_isNeedGeo)(int skirmishAIId, int unitDefId);
 
@@ -1962,8 +1968,6 @@ struct SSkirmishAICallback {
 
 	float             (CALLING_CONV *WeaponDef_getCost)(int skirmishAIId, int weaponDefId, int resourceId); //$ REF:resourceId->Resource
 
-	float             (CALLING_CONV *WeaponDef_getSupplyCost)(int skirmishAIId, int weaponDefId);
-
 	int               (CALLING_CONV *WeaponDef_getProjectilesPerShot)(int skirmishAIId, int weaponDefId);
 
 //	/** The "id=" tag in the TDF */
@@ -2248,4 +2252,4 @@ struct SSkirmishAICallback {
 } // extern "C"
 #endif
 
-#endif // _SKIRMISHAICALLBACK_H
+#endif // S_SKIRMISH_AI_CALLBACK_H

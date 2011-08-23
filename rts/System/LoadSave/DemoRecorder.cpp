@@ -1,32 +1,34 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "DemoRecorder.h"
 
-#include <assert.h>
-#include <errno.h>
+#include "System/mmgr.h"
 
-#include "mmgr.h"
-
-#include "FileSystem/FileSystem.h"
-#include "FileSystem/FileHandler.h"
+#include "System/FileSystem/DataDirsAccess.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/FileSystem/FileQueryFlags.h"
+#include "System/FileSystem/FileHandler.h"
 #include "Game/GameVersion.h"
 #include "Sim/Misc/TeamStatistics.h"
-#include "Util.h"
-#include "TimeUtil.h"
+#include "System/Util.h"
+#include "System/TimeUtil.h"
 
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
+
+#include <cassert>
+#include <cerrno>
+#include <cstring>
 
 CDemoRecorder::CDemoRecorder()
 {
 	// We want this folder to exist
-	if (!filesystem.CreateDirectory("demos"))
+	if (!FileSystem::CreateDirectory("demos"))
 		return;
 
 	SetName("unnamed", "");
 	demoName = GetName();
 
-	std::string filename = filesystem.LocateFile(demoName, FileSystem::WRITE);
+	std::string filename = dataDirsAccess.LocateFile(demoName, FileQueryFlags::WRITE);
 	recordDemo.open(filename.c_str(), std::ios::out | std::ios::binary);
 
 	memset(&fileHeader, 0, sizeof(DemoFileHeader));
@@ -60,8 +62,8 @@ CDemoRecorder::~CDemoRecorder()
 	if (demoName != wantedName) {
 		if (rename(demoName.c_str(), wantedName.c_str()) != 0) {
 #ifndef DEDICATED
-			LogObject() << "Renaming demo " << demoName << " to " << wantedName << "\n";
-			LogObject() << "failed: " << strerror(errno) << "\n";
+			LOG_L(L_ERROR, "Renaming demo %s to %s failed: %s",
+					demoName.c_str(), wantedName.c_str(), strerror(errno));
 #endif
 		}
 	} else {
@@ -237,7 +239,7 @@ void CDemoRecorder::WriteTeamStats()
 
 	// Write array of dwords indicating number of TeamStatistics per team.
 	for (std::vector< std::vector< TeamStatistics > >::iterator it = teamStats.begin(); it != teamStats.end(); ++it) {
-		unsigned int c = swabdword(it->size());
+		unsigned int c = swabDWord(it->size());
 		recordDemo.write((char*)&c, sizeof(unsigned int));
 	}
 

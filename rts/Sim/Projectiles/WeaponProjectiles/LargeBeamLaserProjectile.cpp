@@ -1,15 +1,14 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
-#include "Rendering/GL/myGL.h"
-#include "Game/Camera.h"
 #include "LargeBeamLaserProjectile.h"
+#include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
+#include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
 #include "Sim/Weapons/WeaponDef.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CLargeBeamLaserProjectile, CWeaponProjectile, (ZeroVector, ZeroVector, ZeroVector, ZeroVector, NULL, NULL));
 
@@ -78,13 +77,13 @@ CLargeBeamLaserProjectile::CLargeBeamLaserProjectile(
 void CLargeBeamLaserProjectile::Update()
 {
 	if (ttl > 0) {
-		ttl--;
 		for (int i = 0; i < 3; i++) {
 			corecolstart[i] = (unsigned char) (corecolstart[i] * decay);
 			kocolstart[i] = (unsigned char) (kocolstart[i] * decay);
 		}
 
 		gCEG->Explosion(cegID, startPos + ((endPos - startPos) / ttl), 0.0f, flaresize, NULL, 0.0f, NULL, endPos - startPos);
+		ttl--;
 	}
 	else {
 		deleteMe = true;

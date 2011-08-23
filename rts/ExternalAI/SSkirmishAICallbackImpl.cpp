@@ -1,5 +1,4 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
-#include "StdAfx.h"
 
 #include "ExternalAI/AICallback.h"
 #include "ExternalAI/AICheats.h"
@@ -11,6 +10,15 @@
 #include "ExternalAI/Interface/AISCommands.h"
 #include "ExternalAI/Interface/SSkirmishAICallback.h"
 #include "ExternalAI/Interface/SSkirmishAILibrary.h"
+#include "Game/GlobalUnsynced.h" // for myTeam
+#include "Game/GameSetup.h"
+#include "Game/GameVersion.h"
+#include "Game/SelectedUnits.h"
+#include "Game/UI/GuiHandler.h" //TODO: fix some switch for new gui
+#include "Map/ReadMap.h"
+#include "Map/MetalMap.h"
+#include "Map/MapInfo.h"
+#include "Lua/LuaRulesParams.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/UnitDefHandler.h"
 #include "Sim/Units/UnitHandler.h"
@@ -30,17 +38,8 @@
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/ModInfo.h"
 #include "Sim/Misc/QuadField.h" // for qf->GetFeaturesExact(pos, radius)
-#include "Map/ReadMap.h"
-#include "Map/MetalMap.h"
-#include "Map/MapInfo.h"
-#include "Game/SelectedUnits.h"
-#include "Game/UI/GuiHandler.h" //TODO: fix some switch for new gui
-#include "Game/GameSetup.h"
-#include "Game/GameVersion.h"
-#include "Lua/LuaRulesParams.h"
-#include "FileSystem/ArchiveScanner.h"
-#include "GlobalUnsynced.h" // for myTeam
-#include "LogOutput.h"
+#include "System/FileSystem/ArchiveScanner.h"
+#include "System/Log/ILog.h"
 
 
 static const char* SKIRMISH_AIS_VERSION_COMMON = "common";
@@ -52,31 +51,9 @@ static std::map<int, bool>                 skirmishAIId_cheatingEnabled;
 static std::map<int, bool>                 skirmishAIId_usesCheats;
 static std::map<int, int>                  skirmishAIId_teamId;
 
-static const size_t TMP_ARR_SIZE = 16384;
-// FIXME: the following lines are relatively memory intensive (~1MB per line)
-// this memory is only freed at exit of the application
-// There is quite some CPU and Memory performance waste present
-// in them and their use.
-static int         tmpIntArr[MAX_SKIRMISH_AIS][TMP_ARR_SIZE];
-//static PointMarker tmpPointMarkerArr[MAX_SKIRMISH_AIS][TMP_ARR_SIZE];
-//static LineMarker  tmpLineMarkerArr[MAX_SKIRMISH_AIS][TMP_ARR_SIZE];
-
-/*
- * FIXME: get rid of this and replace with std::vectors that are
- *        automatically grown to the needed size?
- *
- * GCC 4.4.1 on Ubuntu 9.10 segfaults during static initialization of the
- * tmpPointMarkerArr and tmpLineMarkerArr above. This seems to have to do
- * with the size of these arrays. (Bigger crashes more often, but even
- * TMP_ARR_SIZE=1024 still crashes occasionally.)
- *
- * As a workaround, we change the vars to be a reference to a 2d array,
- * and allocate the actual array on the heap.
- */
-static PointMarker (&tmpPointMarkerArr)[MAX_SKIRMISH_AIS][TMP_ARR_SIZE] =
-		*(PointMarker (*)[MAX_SKIRMISH_AIS][TMP_ARR_SIZE]) calloc(MAX_SKIRMISH_AIS * TMP_ARR_SIZE, sizeof(PointMarker));
-static LineMarker (&tmpLineMarkerArr)[MAX_SKIRMISH_AIS][TMP_ARR_SIZE] =
-		*(LineMarker (*)[MAX_SKIRMISH_AIS][TMP_ARR_SIZE]) calloc(MAX_SKIRMISH_AIS * TMP_ARR_SIZE, sizeof(LineMarker));
+static const size_t MARKERS_MAX_SIZE = 16384;
+static std::vector<PointMarker> tmpPointMarkerArr[MAX_SKIRMISH_AIS];
+static std::vector<LineMarker> tmpLineMarkerArr[MAX_SKIRMISH_AIS];
 
 static void checkSkirmishAIId(int skirmishAIId) {
 
@@ -940,7 +917,7 @@ EXPORT(void) skirmishAiCallback_Log_log(int skirmishAIId, const char* const msg)
 	checkSkirmishAIId(skirmishAIId);
 
 	const CSkirmishAILibraryInfo* info = getSkirmishAILibraryInfo(skirmishAIId);
-	logOutput.Print("Skirmish AI <%s-%s>: %s", info->GetName().c_str(), info->GetVersion().c_str(), msg);
+	LOG("Skirmish AI <%s-%s>: %s", info->GetName().c_str(), info->GetVersion().c_str(), msg);
 }
 
 EXPORT(void) skirmishAiCallback_Log_exception(int skirmishAIId, const char* const msg, int severety, bool die) {
@@ -948,7 +925,7 @@ EXPORT(void) skirmishAiCallback_Log_exception(int skirmishAIId, const char* cons
 	checkSkirmishAIId(skirmishAIId);
 
 	const CSkirmishAILibraryInfo* info = getSkirmishAILibraryInfo(skirmishAIId);
-	logOutput.Print("Skirmish AI <%s-%s>: error, severety %i: [%s] %s",
+	LOG_L(L_ERROR, "Skirmish AI <%s-%s>: severety %i: [%s] %s",
 			info->GetName().c_str(), info->GetVersion().c_str(), severety,
 			(die ? "AI shutting down" : "AI still running"), msg);
 	if (die) {
@@ -1059,7 +1036,8 @@ EXPORT(bool) skirmishAiCallback_Cheats_setEnabled(int skirmishAIId, bool enabled
 
 	skirmishAIId_cheatingEnabled[skirmishAIId] = enabled;
 	if (enabled && !skirmishAIId_usesCheats[skirmishAIId]) {
-		logOutput.Print("SkirmishAI (ID = %i, team ID = %i) is using cheats!", skirmishAIId, skirmishAIId_teamId[skirmishAIId]);
+		LOG("SkirmishAI (ID = %i, team ID = %i) is using cheats!",
+				skirmishAIId, skirmishAIId_teamId[skirmishAIId]);
 		skirmishAIId_usesCheats[skirmishAIId] = true;
 	}
 	return (enabled == skirmishAiCallback_Cheats_isEnabled(skirmishAIId));
@@ -1538,7 +1516,7 @@ EXPORT(int) skirmishAiCallback_Map_getHeightMap(int skirmishAIId, float* heights
 EXPORT(int) skirmishAiCallback_Map_getCornersHeightMap(int skirmishAIId,
 		float* cornerHeights, int cornerHeights_sizeMax) {
 
-	static const int cornerHeights_sizeReal = (gs->mapx + 1) * (gs->mapy + 1);
+	static const int cornerHeights_sizeReal = gs->mapxp1 * gs->mapyp1;
 
 	int cornerHeights_size = cornerHeights_sizeReal;
 
@@ -1782,8 +1760,10 @@ EXPORT(void) skirmishAiCallback_Map_findClosestBuildSite(int skirmishAIId, int u
 }
 
 EXPORT(int) skirmishAiCallback_Map_getPoints(int skirmishAIId, bool includeAllies) {
-	return skirmishAIId_callback[skirmishAIId]->GetMapPoints(tmpPointMarkerArr[skirmishAIId],
-			TMP_ARR_SIZE, includeAllies);
+
+	skirmishAIId_callback[skirmishAIId]->GetMapPoints(
+			tmpPointMarkerArr[skirmishAIId], MARKERS_MAX_SIZE, includeAllies);
+	return (int)tmpPointMarkerArr[skirmishAIId].size();
 }
 
 EXPORT(void) skirmishAiCallback_Map_Point_getPosition(int skirmishAIId, int pointId, float* return_posF3_out) {
@@ -1803,8 +1783,10 @@ EXPORT(const char*) skirmishAiCallback_Map_Point_getLabel(int skirmishAIId, int 
 }
 
 EXPORT(int) skirmishAiCallback_Map_getLines(int skirmishAIId, bool includeAllies) {
-	return skirmishAIId_callback[skirmishAIId]->GetMapLines(tmpLineMarkerArr[skirmishAIId],
-			TMP_ARR_SIZE, includeAllies);
+
+	skirmishAIId_callback[skirmishAIId]->GetMapLines(
+			tmpLineMarkerArr[skirmishAIId], MARKERS_MAX_SIZE, includeAllies);
+	return (int)tmpLineMarkerArr[skirmishAIId].size();
 }
 
 EXPORT(void) skirmishAiCallback_Map_Line_getFirstPosition(int skirmishAIId, int lineId, float* return_posF3_out) {
@@ -2307,8 +2289,9 @@ EXPORT(float) skirmishAiCallback_UnitDef_getSlideTolerance(int skirmishAIId, int
 	return getUnitDefById(skirmishAIId, unitDefId)->slideTolerance;
 }
 
+// DEPRECATED
 EXPORT(float) skirmishAiCallback_UnitDef_getMaxSlope(int skirmishAIId, int unitDefId) {
-	return getUnitDefById(skirmishAIId, unitDefId)->maxSlope;
+	return 0.0f;
 }
 
 EXPORT(float) skirmishAiCallback_UnitDef_getMaxHeightDif(int skirmishAIId, int unitDefId) {
@@ -2538,8 +2521,9 @@ EXPORT(float) skirmishAiCallback_UnitDef_getVerticalSpeed(int skirmishAIId, int 
 	return getUnitDefById(skirmishAIId, unitDefId)->verticalSpeed;
 }
 
+// DEPRECATED
 EXPORT(bool) skirmishAiCallback_UnitDef_isAbleToCrash(int skirmishAIId, int unitDefId) {
-	return getUnitDefById(skirmishAIId, unitDefId)->canCrash;
+	return false;
 }
 
 EXPORT(bool) skirmishAiCallback_UnitDef_isHoverAttack(int skirmishAIId, int unitDefId) {
@@ -2704,8 +2688,8 @@ EXPORT(bool) skirmishAiCallback_UnitDef_isTargetingFacility(int skirmishAIId, in
 	return getUnitDefById(skirmishAIId, unitDefId)->targfac;
 }
 
-EXPORT(bool) skirmishAiCallback_UnitDef_isAbleToDGun(int skirmishAIId, int unitDefId) {
-	return getUnitDefById(skirmishAIId, unitDefId)->canDGun;
+EXPORT(bool) skirmishAiCallback_UnitDef_canManualFire(int skirmishAIId, int unitDefId) {
+	return getUnitDefById(skirmishAIId, unitDefId)->canManualFire;
 }
 
 EXPORT(bool) skirmishAiCallback_UnitDef_isNeedGeo(int skirmishAIId, int unitDefId) {
@@ -2799,10 +2783,6 @@ EXPORT(int) skirmishAiCallback_UnitDef_getFlareSalvoSize(int skirmishAIId, int u
 EXPORT(int) skirmishAiCallback_UnitDef_getFlareSalvoDelay(int skirmishAIId, int unitDefId) {
 	return getUnitDefById(skirmishAIId, unitDefId)->flareSalvoDelay;
 }
-
-//EXPORT(bool) skirmishAiCallback_UnitDef_isSmoothAnim(int skirmishAIId, int unitDefId) {
-//	return getUnitDefById(skirmishAIId, unitDefId)->smoothAnim;
-//}
 
 EXPORT(bool) skirmishAiCallback_UnitDef_isAbleToLoopbackAttack(int skirmishAIId, int unitDefId) {
 	return getUnitDefById(skirmishAIId, unitDefId)->canLoopbackAttack;
@@ -3716,13 +3696,8 @@ EXPORT(int) skirmishAiCallback_getFeatures(int skirmishAIId, int* featureIds, in
 		// non cheating
 		int featureIds_size = -1;
 
-		if (featureIds == NULL) {
-			// only return size
-			featureIds_size = skirmishAIId_callback[skirmishAIId]->GetFeatures(tmpIntArr[skirmishAIId], TMP_ARR_SIZE);
-		} else {
-			// return size and values
-			featureIds_size = skirmishAIId_callback[skirmishAIId]->GetFeatures(featureIds, featureIds_sizeMax);
-		}
+		// if (featureIds == NULL), this will only return the number of features
+		featureIds_size = skirmishAIId_callback[skirmishAIId]->GetFeatures(featureIds, featureIds_sizeMax);
 
 		return featureIds_size;
 	}
@@ -3753,13 +3728,8 @@ EXPORT(int) skirmishAiCallback_getFeaturesIn(int skirmishAIId, float* pos_posF3,
 		// non cheating
 		int featureIds_size = -1;
 
-		if (featureIds == NULL) {
-			// only return size
-			featureIds_size = skirmishAIId_callback[skirmishAIId]->GetFeatures(tmpIntArr[skirmishAIId], TMP_ARR_SIZE, pos_posF3, radius);
-		} else {
-			// return size and values
-			featureIds_size = skirmishAIId_callback[skirmishAIId]->GetFeatures(featureIds, featureIds_sizeMax, pos_posF3, radius);
-		}
+		// if (featureIds == NULL), this will only return the number of features
+		featureIds_size = skirmishAIId_callback[skirmishAIId]->GetFeatures(featureIds, featureIds_sizeMax, pos_posF3, radius);
 
 		return featureIds_size;
 	}
@@ -4004,10 +3974,6 @@ EXPORT(float) skirmishAiCallback_WeaponDef_getCost(int skirmishAIId, int weaponD
 	}
 }
 
-EXPORT(float) skirmishAiCallback_WeaponDef_getSupplyCost(int skirmishAIId, int weaponDefId) {
-	return getWeaponDefById(skirmishAIId, weaponDefId)->supplycost;
-}
-
 EXPORT(int) skirmishAiCallback_WeaponDef_getProjectilesPerShot(int skirmishAIId, int weaponDefId) {
 	return getWeaponDefById(skirmishAIId, weaponDefId)->projectilespershot;
 }
@@ -4153,7 +4119,7 @@ EXPORT(float) skirmishAiCallback_WeaponDef_getTurnRate(int skirmishAIId, int wea
 }
 
 EXPORT(float) skirmishAiCallback_WeaponDef_getMaxVelocity(int skirmishAIId, int weaponDefId) {
-	return getWeaponDefById(skirmishAIId, weaponDefId)->maxvelocity;
+	return getWeaponDefById(skirmishAIId, weaponDefId)->projectilespeed * GAME_SPEED; // DEPRECATED
 }
 
 EXPORT(float) skirmishAiCallback_WeaponDef_getProjectileSpeed(int skirmishAIId, int weaponDefId) {
@@ -4736,7 +4702,7 @@ static void skirmishAiCallback_init(SSkirmishAICallback* callback) {
 	callback->UnitDef_isAbleToKamikaze = &skirmishAiCallback_UnitDef_isAbleToKamikaze;
 	callback->UnitDef_getKamikazeDist = &skirmishAiCallback_UnitDef_getKamikazeDist;
 	callback->UnitDef_isTargetingFacility = &skirmishAiCallback_UnitDef_isTargetingFacility;
-	callback->UnitDef_isAbleToDGun = &skirmishAiCallback_UnitDef_isAbleToDGun;
+	callback->UnitDef_canManualFire = &skirmishAiCallback_UnitDef_canManualFire;
 	callback->UnitDef_isNeedGeo = &skirmishAiCallback_UnitDef_isNeedGeo;
 	callback->UnitDef_isFeature = &skirmishAiCallback_UnitDef_isFeature;
 	callback->UnitDef_isHideDamage = &skirmishAiCallback_UnitDef_isHideDamage;
@@ -5021,7 +4987,6 @@ static void skirmishAiCallback_init(SSkirmishAICallback* callback) {
 	callback->WeaponDef_getUpTime = &skirmishAiCallback_WeaponDef_getUpTime;
 	callback->WeaponDef_getFlightTime = &skirmishAiCallback_WeaponDef_getFlightTime;
 	callback->WeaponDef_getCost = &skirmishAiCallback_WeaponDef_getCost;
-	callback->WeaponDef_getSupplyCost = &skirmishAiCallback_WeaponDef_getSupplyCost;
 	callback->WeaponDef_getProjectilesPerShot = &skirmishAiCallback_WeaponDef_getProjectilesPerShot;
 	callback->WeaponDef_isTurret = &skirmishAiCallback_WeaponDef_isTurret;
 	callback->WeaponDef_isOnlyForward = &skirmishAiCallback_WeaponDef_isOnlyForward;

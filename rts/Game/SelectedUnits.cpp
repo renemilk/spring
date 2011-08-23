@@ -1,37 +1,39 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <map>
 #include <SDL_keysym.h>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "SelectedUnits.h"
 #include "SelectedUnitsAI.h"
 #include "Camera.h"
+#include "GlobalUnsynced.h"
 #include "WaitCommandsAI.h"
 #include "PlayerHandler.h"
 #include "UI/CommandColors.h"
 #include "UI/GuiHandler.h"
 #include "UI/TooltipConsole.h"
 #include "ExternalAI/EngineOutHandler.h"
+#include "Rendering/CommandDrawer.h"
+#include "Rendering/LineDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/GlobalSynced.h"
+#include "Sim/MoveTypes/MoveInfo.h"
 #include "Sim/Features/Feature.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/UnitHandler.h"
 #include "Sim/Units/CommandAI/BuilderCAI.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
-#include "Sim/Units/CommandAI/LineDrawer.h"
 #include "Sim/Units/Groups/GroupHandler.h"
 #include "Sim/Units/Groups/Group.h"
 #include "Sim/Units/UnitTypes/TransportUnit.h"
-#include "System/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Util.h"
 #include "System/NetProtocol.h"
 #include "System/Net/PackPacket.h"
@@ -39,6 +41,8 @@
 #include "System/Sound/SoundChannels.h"
 
 #define PLAY_SOUNDS 1
+
+CONFIG(bool, BuildIconsFirst).defaultValue(false);
 
 CSelectedUnits selectedUnits;
 
@@ -59,7 +63,7 @@ CSelectedUnits::~CSelectedUnits()
 
 void CSelectedUnits::Init(unsigned numPlayers)
 {
-	buildIconsFirst = !!configHandler->Get("BuildIconsFirst", 0);
+	buildIconsFirst = configHandler->GetBool("BuildIconsFirst");
 	netSelected.resize(numPlayers);
 }
 
@@ -174,7 +178,7 @@ void CSelectedUnits::GiveCommand(Command c, bool fromUser)
 {
 	GML_RECMUTEX_LOCK(grpsel); // GiveCommand
 
-//	logOutput.Print("Command given %i",c.id);
+//	LOG_L(L_DEBUG, "Command given %i", c.id);
 	if ((gu->spectating && !gs->godMode) || selectedUnits.empty()) {
 		return;
 	}
@@ -426,14 +430,14 @@ void CSelectedUnits::Draw()
 						glColor4fv(cmdColors.buildBox);
 						myColor = true;
 					}
-					builder->DrawQuedBuildingSquares();
+					commandDrawer->DrawQuedBuildingSquares(builder);
 				}
 				else if (teamHandler->AlliedTeams(builder->owner->team, gu->myTeam)) {
 					if (myColor) {
 						glColor4fv(cmdColors.allyBuildBox);
 						myColor = false;
 					}
-					builder->DrawQuedBuildingSquares();
+					commandDrawer->DrawQuedBuildingSquares(builder);
 				}
 			}
 		}
@@ -496,8 +500,8 @@ void CSelectedUnits::AiOrder(int unitid, const Command &c, int playerId)
 		// between time of giving valid orders on units which then change team
 		// due to e.g. LuaRules.
 
-		//logOutput.Print("Invalid order from player %i for (unit %i %s, team %i)",
-		//                playerId, unitid, unit->unitDefName.c_str(), unit->team);
+		//LOG_L(L_WARNING, "Invalid order from player %i for (unit %i %s, team %i)",
+		//		playerId, unitid, unit->unitDefName.c_str(), unit->team);
 		return;
 	}
 
@@ -651,11 +655,11 @@ void CSelectedUnits::DrawCommands()
 	if (selectedGroup != -1) {
 		CUnitSet& groupUnits = grouphandlers[gu->myTeam]->groups[selectedGroup]->units;
 		for(ui = groupUnits.begin(); ui != groupUnits.end(); ++ui) {
-			(*ui)->commandAI->DrawCommands();
+			commandDrawer->Draw((*ui)->commandAI);
 		}
 	} else {
 		for(ui = selectedUnits.begin(); ui != selectedUnits.end(); ++ui) {
-			(*ui)->commandAI->DrawCommands();
+			commandDrawer->Draw((*ui)->commandAI);
 		}
 	}
 
@@ -784,29 +788,24 @@ void CSelectedUnits::SetCommandPage(int page)
 }
 
 
-//! deprecated
-void CSelectedUnits::SendSelection()
-{
-	GML_RECMUTEX_LOCK(sel); // SendSelection
-
-	// first, convert CUnit* to unit IDs.
-	std::vector<short> selectedUnitIDs(selectedUnits.size());
-	std::vector<short>::iterator i = selectedUnitIDs.begin();
-	CUnitSet::const_iterator ui = selectedUnits.begin();
-	for(; ui != selectedUnits.end(); ++i, ++ui) {
-		*i = (*ui)->id;
-	}
-	net->Send(CBaseNetProtocol::Get().SendSelect(gu->myPlayerNum, selectedUnitIDs));
-	selectionChanged = false;
-}
-
 
 void CSelectedUnits::SendCommand(const Command& c)
 {
 	if (selectionChanged) {
 		// send new selection
-		SendSelection();
+		GML_RECMUTEX_LOCK(sel); // SendSelection
+
+		// first, convert CUnit* to unit IDs.
+		std::vector<short> selectedUnitIDs(selectedUnits.size());
+		std::vector<short>::iterator i = selectedUnitIDs.begin();
+		CUnitSet::const_iterator ui = selectedUnits.begin();
+		for(; ui != selectedUnits.end(); ++i, ++ui) {
+			*i = (*ui)->id;
+		}
+		net->Send(CBaseNetProtocol::Get().SendSelect(gu->myPlayerNum, selectedUnitIDs));
+		selectionChanged = false;
 	}
+
 	net->Send(CBaseNetProtocol::Get().SendCommand(gu->myPlayerNum, c.GetID(), c.options, c.params));
 }
 
@@ -839,8 +838,8 @@ void CSelectedUnits::SendCommandsToUnits(const std::vector<int>& unitIDs, const 
 	msgLen += commandCount * (4 + 1 + 2); // id, options, params size
 	msgLen += totalParams * 4;
 	if (msgLen > 8192) {
-		logOutput.Print("Discarded oversized NETMSG_AICOMMANDS packet: %i\n",
-		                msgLen);
+		LOG_L(L_WARNING, "Discarded oversized NETMSG_AICOMMANDS packet: %i",
+				msgLen);
 		return; // drop the oversized packet
 	}
 	netcode::PackPacket* packet = new netcode::PackPacket(msgLen);

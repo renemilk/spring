@@ -1,6 +1,8 @@
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
 #include "myGL.h"
 #include "LightHandler.h"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/Shader.h"
 #include "Sim/Misc/GlobalSynced.h"
 
 static const float4 ZeroVector4 = float4(0.0f, 0.0f, 0.0f, 0.0f);

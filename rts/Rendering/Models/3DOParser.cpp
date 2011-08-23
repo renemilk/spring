@@ -1,31 +1,34 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include <vector>
-#include <set>
-#include <algorithm>
-#include <cctype>
-#include <locale>
-#include <stdexcept>
-#include "mmgr.h"
-
 #include "3DOParser.h"
+
+#include "System/mmgr.h"
+
+#include "Game/GlobalUnsynced.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Sim/Misc/CollisionVolume.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
 #include "System/Util.h"
 #include "System/Exceptions.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
 #include "System/Matrix44f.h"
+#include "System/Log/ILog.h"
 #include "System/FileSystem/VFSHandler.h"
 #include "System/FileSystem/FileHandler.h"
 #include "System/FileSystem/SimpleParser.h"
 #include "System/Platform/byteorder.h"
+
+#include <vector>
+#include <set>
+#include <algorithm>
+#include <cctype>
+#include <locale>
+#include <stdexcept>
 #include <boost/cstdint.hpp>
 
-using namespace std;
+using std::list;
+using std::map;
+
 
 static const float  scaleFactor = 1 / (65536.0f);
 static const float3 DownVector  = -UpVector;
@@ -121,7 +124,7 @@ C3DOParser::C3DOParser()
 }
 
 
-S3DModel* C3DOParser::Load(const string& name)
+S3DModel* C3DOParser::Load(const std::string& name)
 {
 	CFileHandler file(name);
 	if (!file.FileExists()) {
@@ -214,7 +217,7 @@ void C3DOParser::GetPrimitives(S3DOPiece* obj, int pos, int num, int excludePrim
 		list<int> orderVert;
 		for(int b=0;b<sp.numVertex;b++){
 			SimStreamRead(&w,2);
-			w = swabword(w);
+			swabWordInPlace(w);
 			sp.vertices.push_back(w);
 			orderVert.push_back(w);
 		}
@@ -238,8 +241,8 @@ void C3DOParser::GetPrimitives(S3DOPiece* obj, int pos, int num, int excludePrim
 		}
 
 		if ((sp.texture = texturehandler3DO->Get3DOTexture(texName)) == NULL) {
-			LogObject() << "[" << __FUNCTION__ << "] ";
-			LogObject() << "unknown 3DO texture \"" << texName << "\" for piece \"" << obj->name << "\"\n";
+			LOG_L(L_WARNING, "[%s] unknown 3DO texture \"%s\" for piece \"%s\"",
+					__FUNCTION__, texName.c_str(), obj->name.c_str());
 
 			// assign a dummy texture (the entire atlas)
 			sp.texture = texturehandler3DO->Get3DOTexture("___dummy___");
@@ -291,7 +294,7 @@ void C3DOParser::GetPrimitives(S3DOPiece* obj, int pos, int num, int excludePrim
 
 		for (int b = 0; b < sp.numVertex; b++) {
 			SimStreamRead(&w, 2);
-			w = swabword(w);
+			swabWordInPlace(w);
 			obj->vertices[w].prims.push_back(obj->prims.size() - 1);
 		}
 	}

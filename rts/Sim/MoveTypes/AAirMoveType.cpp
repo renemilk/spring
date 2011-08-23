@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "AAirMoveType.h"
 #include "MoveMath/MoveMath.h"
 
@@ -42,7 +41,7 @@ AAirMoveType::AAirMoveType(CUnit* unit) :
 	autoLand(true),
 	lastColWarning(NULL),
 	lastColWarningType(0),
-	lastFuelUpdateFrame(0)
+	lastFuelUpdateFrame(gs->frameNum)
 {
 	useHeading = false;
 }
@@ -61,11 +60,7 @@ bool AAirMoveType::UseSmoothMesh() const {
 			!owner->commandAI->commandQue.empty() &&
 			((owner->commandAI->commandQue.front().GetID() == CMD_LOAD_UNITS) || (owner->commandAI->commandQue.front().GetID() == CMD_UNLOAD_UNIT));
 		const bool repairing = reservedPad ? padStatus >= 1 : false;
-		const bool forceDisableSmooth =
-			repairing ||
-			aircraftState == AIRCRAFT_LANDING ||
-			aircraftState == AIRCRAFT_LANDED ||
-			onTransportMission;
+		const bool forceDisableSmooth = repairing || onTransportMission || (aircraftState != AIRCRAFT_FLYING);
 		return !forceDisableSmooth;
 	} else {
 		return false;
@@ -91,19 +86,20 @@ void AAirMoveType::DependentDied(CObject* o) {
 bool AAirMoveType::Update() {
 	// NOTE: useHeading is never true by default for aircraft (AAirMoveType
 	// forces it to false, TransportUnit::{Attach,Detach}Unit manipulate it
-	// specifically for TAAirMoveType's)
+	// specifically for HoverAirMoveType's)
 	if (useHeading) {
 		useHeading = false;
 		SetState(AIRCRAFT_TAKEOFF);
 	}
 
-	return false; // this return value is never used
+	// this return value is never used
+	return false;
 }
 
 void AAirMoveType::UpdateFuel() {
 	if (owner->unitDef->maxFuel > 0.0f) {
 		if (aircraftState != AIRCRAFT_LANDED)
-			owner->currentFuel = std::max(0.0f, owner->currentFuel - ((float)(gs->frameNum - lastFuelUpdateFrame) / GAME_SPEED));
+			owner->currentFuel = std::max(0.0f, owner->currentFuel - (float(gs->frameNum - lastFuelUpdateFrame) / GAME_SPEED));
 
 		lastFuelUpdateFrame = gs->frameNum;
 	}

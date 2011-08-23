@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include "EFX.h"
 
 #include "ALShared.h"
@@ -9,12 +8,15 @@
 #include "EFXfuncs.h"
 
 #include "SoundLog.h"
-#include "ConfigHandler.h"
-#include "myMath.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/myMath.h"
 
 
 /******************************************************************************/
 /******************************************************************************/
+
+CONFIG(float, snd_airAbsorption).defaultValue(AL_DEFAULT_AIR_ABSORPTION_FACTOR);
+CONFIG(bool, UseEFX).defaultValue(true);
 
 static std::string default_preset = "outdoors_valley";//"bathroom";
 
@@ -35,10 +37,13 @@ CEFX::CEFX(ALCdevice* device)
 	,maxSlots(0)
 	,maxSlotsPerSource(0)
 {
-	airAbsorptionFactor = configHandler->Get("snd_airAbsorption", AL_DEFAULT_AIR_ABSORPTION_FACTOR);
+	airAbsorptionFactor = configHandler->GetFloat("snd_airAbsorption");
 	airAbsorptionFactor = Clamp(airAbsorptionFactor, AL_MIN_AIR_ABSORPTION_FACTOR, AL_MAX_AIR_ABSORPTION_FACTOR);
 
-	supported = alcIsExtensionPresent(device, "ALC_EXT_EFX");
+	bool hasExtension = alcIsExtensionPresent(device, "ALC_EXT_EFX");
+
+	if(hasExtension && alGenEffects && alDeleteEffects)
+		supported = true;
 
 	//! set default preset
 	eaxPresets["default"] = eaxPresets[default_preset];
@@ -48,7 +53,10 @@ CEFX::CEFX(ALCdevice* device)
 	*sfxProperties = eaxPresets[default_preset];
 
 	if (!supported) {
-		LogObject(LOG_SOUND) << "  EFX Supported: no";
+		if(!hasExtension)
+			LOG_L(L_WARNING, "  EFX Supported: no");
+		else
+			LOG_L(L_WARNING, "  EFX is supported but software does not seem to work properly");
 		return;
 	}
 
@@ -129,7 +137,7 @@ CEFX::CEFX(ALCdevice* device)
 		|| (maxSlots<1)
 		|| (maxSlotsPerSource<1)
 	) {
-		LogObject(LOG_SOUND) << "  EFX Supported: no";
+		LOG_L(L_WARNING, "  EFX Supported: no");
 		return;
 	}
 
@@ -141,7 +149,7 @@ CEFX::CEFX(ALCdevice* device)
 	alGenFilters(1, &sfxFilter);
 		alFilteri(sfxFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
 	if (!alIsAuxiliaryEffectSlot(sfxSlot) || !alIsEffect(sfxReverb) || !alIsFilter(sfxFilter)) {
-		LogObject(LOG_SOUND) << "  Initializing EFX failed!";
+		LOG_L(L_ERROR, "  Initializing EFX failed!");
 		alDeleteFilters(1, &sfxFilter);
 		alDeleteEffects(1, &sfxReverb);
 		alDeleteAuxiliaryEffectSlots(1, &sfxSlot);
@@ -152,7 +160,7 @@ CEFX::CEFX(ALCdevice* device)
 	//! Load defaults
 	CommitEffects();
 	if (!CheckError("  EFX")) {
-		LogObject(LOG_SOUND) << "  Initializing EFX failed!";
+		LOG_L(L_ERROR, "  Initializing EFX failed!");
 		alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
 		alDeleteFilters(1, &sfxFilter);
 		alDeleteEffects(1, &sfxReverb);
@@ -163,15 +171,12 @@ CEFX::CEFX(ALCdevice* device)
 	supported = true;
 
 	//! User may disable it (performance reasons?)
-	if (!configHandler->Get("UseEFX", true)) {
-		LogObject(LOG_SOUND) << "  EFX Enabled: no";
-		return;
+	enabled = configHandler->GetBool("UseEFX");
+	LOG("  EFX Enabled: %s", (enabled ? "yes" : "no"));
+	if (enabled) {
+		LOG_L(L_DEBUG, "  EFX MaxSlots: %i", maxSlots);
+		LOG_L(L_DEBUG, "  EFX MaxSlotsPerSource: %i", maxSlotsPerSource);
 	}
-
-	LogObject(LOG_SOUND) << "  EFX Enabled: yes";
-	//LogObject(LOG_SOUND) << "  EFX MaxSlots: " << maxSlots;
-	//LogObject(LOG_SOUND) << "  EFX MaxSlotsPerSource: " << maxSlotsPerSource;
-	enabled = true;
 }
 
 
@@ -192,7 +197,7 @@ void CEFX::Enable()
 	if (supported && !enabled) {
 		enabled = true;
 		CommitEffects();
-		LogObject(LOG_SOUND) << "EAX enabled";
+		LOG("EAX enabled");
 	}
 }
 
@@ -202,7 +207,7 @@ void CEFX::Disable()
 	if (enabled) {
 		enabled = false;
 		alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
-		LogObject(LOG_SOUND) << "EAX disabled";
+		LOG("EAX disabled");
 	}
 }
 
@@ -219,7 +224,7 @@ void CEFX::SetPreset(std::string name, bool verbose, bool commit)
 		if (commit)
 			CommitEffects();
 		if (verbose)
-			LogObject(LOG_SOUND) << "EAX Preset changed to: " << name;
+			LOG("EAX Preset changed to: %s", name.c_str());
 	}
 }
 

@@ -6,8 +6,9 @@
 #include <string>
 #include <map>
 #include <boost/noncopyable.hpp>
+#include <cstring>
 
-#include "float3.h"
+#include "System/float3.h"
 
 // disable this if you want minimal profiling
 // (sim time is still measured because of game slowdown)
@@ -24,6 +25,7 @@ protected:
 	const unsigned starttime;
 };
 
+
 /**
  * @brief Time profiling helper class
  *
@@ -33,28 +35,39 @@ protected:
 class ScopedTimer : public BasicTimer
 {
 public:
-	ScopedTimer(const char* const name);
+	ScopedTimer(const char* const name, bool autoShow = false): BasicTimer(name) {
+		autoShowGraph = autoShow;
+	}
 	/**
 	 * @brief destroy and add time to profiler
 	 */
 	~ScopedTimer();
+
+private:
+	bool autoShowGraph;
 };
+
 
 class ScopedOnceTimer : public BasicTimer
 {
 public:
-	ScopedOnceTimer(const char* const name);
-	ScopedOnceTimer(const std::string& name);
+	ScopedOnceTimer(const char* const name): BasicTimer(name) {}
+	ScopedOnceTimer(const std::string& name): BasicTimer(name.c_str()) {}
 	/**
 	 * @brief destroy and print passed time to infolog
 	 */
 	~ScopedOnceTimer();
 };
 
+
+
 class CTimeProfiler
 {
 public:
 	struct TimeRecord {
+		TimeRecord() : total(0), current(0), percent(0), color(0,0,0), showGraph(false), peak(0), newpeak(false) { 
+			memset(frames, 0, sizeof(frames));
+		}
 		unsigned total;
 		unsigned current;
 		static const unsigned frames_size = 128;
@@ -62,13 +75,15 @@ public:
 		float percent;
 		float3 color;
 		bool showGraph;
+		float peak;
+		bool newpeak;
 	};
 
 	CTimeProfiler();
 	~CTimeProfiler();
 
 	float GetPercent(const char *name);
-	void AddTime(const std::string& name, unsigned time);
+	void AddTime(const std::string& name, unsigned time, bool showGraph = false);
 	void Update();
 
 	void PrintProfilingInfo() const;

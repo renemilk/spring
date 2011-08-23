@@ -1,28 +1,27 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifdef _MSC_VER
-#	include "StdAfx.h"
-#elif defined(_WIN32)
-#	include <windows.h>
-#endif
-
 #include <boost/asio.hpp>
+
 #include "lib/streflop/streflop_cond.h"
 
-#ifndef _MSC_VER
-#include "StdAfx.h"
-#endif
-
 #include "OSCStatsSender.h"
-#include "Sim/Misc/TeamHandler.h"
-#include "Game/Game.h"
 #include "lib/oscpack/OscOutboundPacketStream.h"
-#include "System/Net/Socket.h"
+#include "Game/Game.h"
 #include "Game/GameVersion.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/PlayerHandler.h"
-#include "GlobalUnsynced.h"
-#include "ConfigHandler.h"
-#include "LogOutput.h"
+#include "Sim/Misc/TeamHandler.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
+#include "System/Net/Socket.h"
+
+CONFIG(bool, OscStatsSenderEnabled).defaultValue(false);
+CONFIG(std::string, OscStatsSenderDestinationAddress).defaultValue("127.0.0.1");
+
+CONFIG(int, OscStatsSenderDestinationPort)
+	.defaultValue(6447)
+	.minimumValue(0)
+	.maximumValue(65535);
 
 COSCStatsSender* COSCStatsSender::singleton = NULL;
 
@@ -39,7 +38,7 @@ COSCStatsSender::COSCStatsSender(const std::string& dstAddress,
 		network(NULL),
 		oscOutputBuffer(NULL), oscPacker(NULL)
 {
-	SetEnabled(configHandler->Get("OscStatsSenderEnabled", false));
+	SetEnabled(configHandler->GetBool("OscStatsSenderEnabled"));
 }
 COSCStatsSender::~COSCStatsSender() {
 	SetEnabled(false);
@@ -61,7 +60,7 @@ void COSCStatsSender::SetEnabled(bool enabled) {
 			boost::asio::socket_base::broadcast option(true);
 			network->outSocket->set_option(option);
 			UpdateDestination();
-			logOutput.Print("Sending spring Statistics over OSC to: %s:%u",
+			LOG("Sending spring Statistics over OSC to: %s:%u",
 					dstAddress.c_str(), dstPort);
 
 			SendInit();
@@ -85,10 +84,8 @@ bool COSCStatsSender::IsEnabled() const {
 COSCStatsSender* COSCStatsSender::GetInstance() {
 
 	if (COSCStatsSender::singleton == NULL) {
-		std::string dstAddress = configHandler->GetString(
-				"OscStatsSenderDestinationAddress", "127.0.0.1");
-		unsigned int dstPort   = configHandler->Get(
-				"OscStatsSenderDestinationPort", (unsigned int) 6447);
+		std::string dstAddress = configHandler->GetString("OscStatsSenderDestinationAddress");
+		unsigned int dstPort   = configHandler->GetInt("OscStatsSenderDestinationPort");
 
 		static COSCStatsSender instance(dstAddress, dstPort);
 		COSCStatsSender::singleton = &instance;
@@ -105,8 +102,8 @@ bool COSCStatsSender::SendInit() {
 			return SendInitialInfo()
 					&& SendTeamStatsTitles()
 					&& SendPlayerStatsTitles();
-		} catch (boost::system::system_error ex) {
-			logOutput.Print("Failed sending OSC Stats init: %s", ex.what());
+		} catch (const boost::system::system_error& ex) {
+			LOG_L(L_ERROR, "Failed sending OSC Stats init: %s", ex.what());
 			return false;
 		}
 	} else {
@@ -121,8 +118,8 @@ bool COSCStatsSender::Update(int frameNum) {
 			// Try to send team stats first, as they are more important,
 			// more interesting.
 			return SendTeamStats() && SendPlayerStats();
-		} catch (boost::system::system_error ex) {
-			logOutput.Print("Failed sending OSC Stats init: %s", ex.what());
+		} catch (const boost::system::system_error& ex) {
+			LOG_L(L_ERROR, "Failed sending OSC Stats init: %s", ex.what());
 			return false;
 		}
 	} else {

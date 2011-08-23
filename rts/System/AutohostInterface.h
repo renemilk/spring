@@ -7,8 +7,6 @@
 #include <boost/cstdint.hpp>
 #include <boost/asio/ip/udp.hpp>
 
-class SocketPtr;
-
 /**
  * API for engine <-> autohost (or similar) communication, using UDP over
  * loopback.
@@ -63,6 +61,7 @@ private:
 
 	/**
 	 * Tries to bind a socket for communication with a UDP server.
+	 * @param socket socket to bind
 	 * @param remoteIP IP of the remote host to connect to
 	 * @param remotePort the port where the remote host runs its
 	 *   UDP service

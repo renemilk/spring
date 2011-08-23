@@ -1,6 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
-#include "StdAfx.h"
 
+#include "Game/GlobalUnsynced.h"
 #include "Game/SelectedUnits.h"
 #include "Game/UI/GuiHandler.h"
 #include "Map/BaseGroundDrawer.h"
@@ -29,7 +29,6 @@
 #include "Rendering/DefaultPathDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/glExtra.h"
-#include "System/GlobalUnsynced.h"
 #include "System/myMath.h"
 
 DefaultPathDrawer::DefaultPathDrawer() {
@@ -70,10 +69,10 @@ void DefaultPathDrawer::UpdateExtraTexture(int extraTex, int starty, int endy, i
 			}
 
 			if (useCurrentBuildOrder) {
-				for (int y = starty; y < endy; ++y) {
-					for (int x = 0; x < gs->hmapx; ++x) {
-						const float3 pos(x * (SQUARE_SIZE << 1) + SQUARE_SIZE, 0.0f, y * (SQUARE_SIZE << 1) + SQUARE_SIZE);
-						const int idx = ((y * (gs->pwr2mapx >> 1)) + x) * 4 - offset;
+				for (int ty = starty; ty < endy; ++ty) {
+					for (int tx = 0; tx < gs->hmapx; ++tx) {
+						const float3 pos(tx * (SQUARE_SIZE << 1) + SQUARE_SIZE, 0.0f, ty * (SQUARE_SIZE << 1) + SQUARE_SIZE);
+						const int idx = ((ty * (gs->pwr2mapx >> 1)) + tx) * 4 - offset;
 						float m = 0.0f;
 
 						if (!loshandler->InLos(pos, gu->myAllyTeam)) {
@@ -86,7 +85,7 @@ void DefaultPathDrawer::UpdateExtraTexture(int extraTex, int starty, int endy, i
 
 							GML_RECMUTEX_LOCK(quad); // UpdateExtraTexture - testunitbuildsquare accesses features in the quadfield
 
-							if (uh->TestUnitBuildSquare(bi, f, gu->myAllyTeam)) {
+							if (uh->TestUnitBuildSquare(bi, f, gu->myAllyTeam, false)) {
 								if (f != NULL) {
 									m = 0.5f;
 								} else {
@@ -107,7 +106,10 @@ void DefaultPathDrawer::UpdateExtraTexture(int extraTex, int starty, int endy, i
 				}
 			} else {
 				const MoveData* md = NULL;
-				const bool showBlockedMap = (gs->cheatEnabled || gu->spectating);
+				const bool los = (gs->cheatEnabled || gu->spectating);
+
+				const float* hm = readmap->GetCornerHeightMapUnsynced();
+				const float3* cn = readmap->GetCenterNormalsUnsynced();
 
 				{
 					GML_RECMUTEX_LOCK(sel); // UpdateExtraTexture
@@ -122,31 +124,47 @@ void DefaultPathDrawer::UpdateExtraTexture(int extraTex, int starty, int endy, i
 					}
 				}
 
-				for (int y = starty; y < endy; ++y) {
-					for (int x = 0; x < gs->hmapx; ++x) {
-						const int idx = ((y * (gs->pwr2mapx >> 1)) + x) * 4 - offset;
+				for (int ty = starty; ty < endy; ++ty) {
+					for (int tx = 0; tx < gs->hmapx; ++tx) {
+						const int texIdx = ((ty * (gs->pwr2mapx >> 1)) + tx) * 4 - offset;
+						const int hmIdx = (ty << 1) * gs->mapxp1 + (tx << 1);
+						const int cnIdx = (ty << 1) * (gs->mapx    ) + (tx << 1);
 
 						if (md != NULL) {
-							float m = md->moveMath->GetPosSpeedMod(*md, x << 1, y << 1);
+							const float height = hm[hmIdx];
+							const float slope = 1.0f - cn[cnIdx].y;
+							float m = 1.0f;
 
-							if (showBlockedMap && (md->moveMath->IsBlocked(*md, (x << 1) + 1, (y << 1) + 1) & CMoveMath::BLOCK_STRUCTURE)) {
-								m = 0.0f;
+							if (md->moveFamily == MoveData::Ship) {
+								// only check water depth
+								m = (height >= (-md->depth))? 0.0f: m;
+							} else {
+								// check depth and slope (if hover, only over land)
+								m = std::max(0.0f, 1.0f - (slope / (md->maxSlope + 0.1f)));
+								m = (height < (-md->depth))? 0.0f: m;
+								m = (height <= 0.0f && md->moveFamily == MoveData::Hover)? 1.0f: m;
 							}
 
-							m = std::min(1.0f, fastmath::apxsqrt(m));
-							m = int(m * 255.0f);
+							m = Clamp(m, 0.0f, 1.0f);
+							m *= 255;
 
-							texMem[idx + CBaseGroundDrawer::COLOR_R] = 255 - m;
-							texMem[idx + CBaseGroundDrawer::COLOR_G] = m;
-							texMem[idx + CBaseGroundDrawer::COLOR_B] = 0;
-							texMem[idx + CBaseGroundDrawer::COLOR_A] = 255;
+							if (los || loshandler->InLos((tx << 1), (ty << 1), gu->myAllyTeam)) {
+								if ((md->moveMath->IsBlocked(*md, (tx << 1) + 1, (ty << 1) + 1) & CMoveMath::BLOCK_STRUCTURE)) {
+									m = 0.0f;
+								}
+							}
+
+							texMem[texIdx + CBaseGroundDrawer::COLOR_R] = 255 - m;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_G] = m;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_B] = 0;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_A] = 255;
 						} else {
 							// we have nothing to show
 							// -> draw a dark red overlay
-							texMem[idx + CBaseGroundDrawer::COLOR_R] = 100;
-							texMem[idx + CBaseGroundDrawer::COLOR_G] = 0;
-							texMem[idx + CBaseGroundDrawer::COLOR_B] = 0;
-							texMem[idx + CBaseGroundDrawer::COLOR_A] = 255;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_R] = 100;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_G] = 0;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_B] = 0;
+							texMem[texIdx + CBaseGroundDrawer::COLOR_A] = 255;
 						}
 					}
 				}
@@ -154,14 +172,14 @@ void DefaultPathDrawer::UpdateExtraTexture(int extraTex, int starty, int endy, i
 		} break;
 
 		case CBaseGroundDrawer::drawPathHeat: {
-			for (int y = starty; y < endy; ++y) {
-				for (int x = 0; x < gs->hmapx; ++x) {
-					const int idx = ((y * (gs->pwr2mapx >> 1)) + x) * 4 - offset;
+			for (int ty = starty; ty < endy; ++ty) {
+				for (int tx = 0; tx < gs->hmapx; ++tx) {
+					const int texIdx = ((ty * (gs->pwr2mapx >> 1)) + tx) * 4 - offset;
 
-					texMem[idx + CBaseGroundDrawer::COLOR_R] = Clamp(8 * pm->GetHeatOnSquare(x << 1, y << 1), 32, 255);
-					texMem[idx + CBaseGroundDrawer::COLOR_G] = 32;
-					texMem[idx + CBaseGroundDrawer::COLOR_B] = 32;
-					texMem[idx + CBaseGroundDrawer::COLOR_A] = 255;
+					texMem[texIdx + CBaseGroundDrawer::COLOR_R] = Clamp(8 * pm->GetHeatOnSquare(tx << 1, ty << 1), 32, 255);
+					texMem[texIdx + CBaseGroundDrawer::COLOR_G] = 32;
+					texMem[texIdx + CBaseGroundDrawer::COLOR_B] = 32;
+					texMem[texIdx + CBaseGroundDrawer::COLOR_A] = 255;
 				}
 			}
 		} break;
@@ -288,7 +306,7 @@ void DefaultPathDrawer::Draw(const CPathFinder* pf) const {
 		float3 p1;
 			p1.x = sqr.x * SQUARE_SIZE;
 			p1.z = sqr.y * SQUARE_SIZE;
-			p1.y = ground->GetHeightAboveWater(p1.x, p1.z) + 15;
+			p1.y = ground->GetHeightAboveWater(p1.x, p1.z, false) + 15;
 		float3 p2;
 
 		const int dir = pf->squareStates[square].nodeMask & PATHOPT_DIRECTION;
@@ -299,7 +317,7 @@ void DefaultPathDrawer::Draw(const CPathFinder* pf) const {
 		if (obsquare >= 0) {
 			p2.x = obx * SQUARE_SIZE;
 			p2.z = obz * SQUARE_SIZE;
-			p2.y = ground->GetHeightAboveWater(p2.x, p2.z) + 15;
+			p2.y = ground->GetHeightAboveWater(p2.x, p2.z, false) + 15;
 
 			glVertexf3(p1);
 			glVertexf3(p2);
@@ -342,7 +360,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 			float3 p1;
 			p1.x = (blockState[blocknr].sqrCenter[md->pathType].x) * 8;
 			p1.z = (blockState[blocknr].sqrCenter[md->pathType].y) * 8;
-			p1.y = ground->GetHeightAboveWater(p1.x, p1.z) + 10;
+			p1.y = ground->GetHeightAboveWater(p1.x, p1.z, false) + 10;
 
 			glColor3f(1, 1, blue);
 			glVertexf3(p1);
@@ -357,7 +375,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 
 					p2.x = (blockState[obblocknr].sqrCenter[md->pathType].x) * 8;
 					p2.z = (blockState[obblocknr].sqrCenter[md->pathType].y) * 8;
-					p2.y = ground->GetHeightAboveWater(p2.x, p2.z) + 10;
+					p2.y = ground->GetHeightAboveWater(p2.x, p2.z, false) + 10;
 
 					int vertexNbr = md->pathType * nbrOfBlocks * PATH_DIRECTION_VERTICES + blocknr * PATH_DIRECTION_VERTICES + directionVertex[dir];
 					float cost = vertex[vertexNbr];
@@ -380,7 +398,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 			float3 p1;
 			p1.x = (blockState[blocknr].sqrCenter[md->pathType].x) * SQUARE_SIZE;
 			p1.z = (blockState[blocknr].sqrCenter[md->pathType].y) * SQUARE_SIZE;
-			p1.y = ground->GetHeightAboveWater(p1.x, p1.z) + 10;
+			p1.y = ground->GetHeightAboveWater(p1.x, p1.z, false) + 10;
 
 			glColor3f(1, 1, blue);
 			for (int dir = 0; dir < PATH_DIRECTION_VERTICES; dir++) {
@@ -393,7 +411,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 
 					p2.x = (blockState[obblocknr].sqrCenter[md->pathType].x) * SQUARE_SIZE;
 					p2.z = (blockState[obblocknr].sqrCenter[md->pathType].y) * SQUARE_SIZE;
-					p2.y = ground->GetHeightAboveWater(p2.x, p2.z) + 10;
+					p2.y = ground->GetHeightAboveWater(p2.x, p2.z, false) + 10;
 
 					int vertexNbr = md->pathType * nbrOfBlocks * PATH_DIRECTION_VERTICES + blocknr * PATH_DIRECTION_VERTICES + directionVertex[dir];
 					float cost = vertex[vertexNbr];
@@ -427,7 +445,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 		float3 p1;
 			p1.x = (pe->blockStates[blocknr].nodeOffsets[md->pathType].x) * SQUARE_SIZE;
 			p1.z = (pe->blockStates[blocknr].nodeOffsets[md->pathType].y) * SQUARE_SIZE;
-			p1.y = ground->GetHeightAboveWater(p1.x, p1.z) + 15;
+			p1.y = ground->GetHeightAboveWater(p1.x, p1.z, false) + 15;
 		float3 p2;
 
 		const int obx = pe->blockStates[ob->nodeNum].parentNodePos.x;
@@ -437,7 +455,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 		if (obblocknr >= 0) {
 			p2.x = (pe->blockStates[obblocknr].nodeOffsets[md->pathType].x) * SQUARE_SIZE;
 			p2.z = (pe->blockStates[obblocknr].nodeOffsets[md->pathType].y) * SQUARE_SIZE;
-			p2.y = ground->GetHeightAboveWater(p2.x, p2.z) + 15;
+			p2.y = ground->GetHeightAboveWater(p2.x, p2.z, false) + 15;
 
 			glVertexf3(p1);
 			glVertexf3(p2);
@@ -458,7 +476,7 @@ void DefaultPathDrawer::Draw(const CPathEstimator* pe) const {
 		float3 p1;
 			p1.x = (ob->block.x * BLOCK_SIZE + pe->blockState[blocknr].sqrCenter[md->pathType].x) * SQUARE_SIZE;
 			p1.z = (ob->block.y * BLOCK_SIZE + pe->blockState[blocknr].sqrCenter[md->pathType].y) * SQUARE_SIZE;
-			p1.y = ground->GetHeightAboveWater(p1.x, p1.z) + 15;
+			p1.y = ground->GetHeightAboveWater(p1.x, p1.z, false) + 15;
 
 		if (camera->pos.SqDistance(p1) < 250000) {
 			font->glWorldPrint(p1, 5, "%.0f %.0f", ob->cost, ob->currentCost);

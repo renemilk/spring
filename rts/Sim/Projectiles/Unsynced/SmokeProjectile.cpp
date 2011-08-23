@@ -1,18 +1,17 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "SmokeProjectile.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
 #include "Sim/Misc/Wind.h"
-#include "System/GlobalUnsynced.h"
 
 CR_BIND_DERIVED(CSmokeProjectile, CProjectile, );
 
@@ -50,7 +49,7 @@ void CSmokeProjectile::Init(const float3& pos, CUnit* owner)
 {
 	textureNum = (int) (gu->usRandInt() % projectileDrawer->smoketex.size());
 
-	if (pos.y - ground->GetApproximateHeight(pos.x, pos.z) > 10.0f) {
+	if (pos.y - ground->GetApproximateHeight(pos.x, pos.z, false) > 10.0f) {
 		useAirLos = true;
 	}
 
@@ -74,7 +73,7 @@ CSmokeProjectile::CSmokeProjectile(const float3& pos, const float3& speed, float
 	castShadow = true;
 	textureNum = (int) (gu->usRandInt() % projectileDrawer->smoketex.size());
 
-	if ((pos.y - ground->GetApproximateHeight(pos.x, pos.z)) > 10) {
+	if ((pos.y - ground->GetApproximateHeight(pos.x, pos.z, false)) > 10) {
 		useAirLos = true;
 	}
 
@@ -83,10 +82,6 @@ CSmokeProjectile::CSmokeProjectile(const float3& pos, const float3& speed, float
 	}
 }
 
-CSmokeProjectile::~CSmokeProjectile()
-{
-
-}
 
 
 void CSmokeProjectile::Update()

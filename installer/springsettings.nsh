@@ -6,7 +6,6 @@
 
 !define PRODUCT_VERSION "${VERSION_TAG}"
 !define SP_BASENAME "spring_${PRODUCT_VERSION}"
-
 !define PRODUCT_PUBLISHER "Spring team"
 !define PRODUCT_WEB_SITE "http://www.springrts.com"
 

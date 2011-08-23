@@ -2,8 +2,8 @@
 
 #include "GameParticipant.h"
 
-#include "Net/Connection.h"
-#include "BaseNetProtocol.h"
+#include "System/Net/Connection.h"
+#include "System/BaseNetProtocol.h"
 
 GameParticipant::GameParticipant()
 : myState(UNCONNECTED)
@@ -35,6 +35,7 @@ void GameParticipant::Kill(const std::string& reason)
 	if (link)
 	{
 		link->SendData(CBaseNetProtocol::Get().SendQuit(reason));
+		link->Close();
 		link.reset();
 	}
 #ifdef SYNCCHECK

@@ -16,11 +16,11 @@
 #include "Sim/Units/CommandAI/Command.h"
 #include "Rendering/IconHandler.h"
 #include "Rendering/Models/IModelParser.h"
+#include "System/EventHandler.h"
 #include "System/Exceptions.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/myMath.h"
 #include "System/Util.h"
-
 
 /******************************************************************************/
 
@@ -87,9 +87,10 @@ UnitDef::UnitDef()
 , turnInPlaceSpeedLimit(0.0f)
 , upright(false)
 , collide(false)
+, losHeight(0.0f)
+, radarHeight(0.0f)
 , losRadius(0.0f)
 , airLosRadius(0.0f)
-, losHeight(0.0f)
 , radarRadius(0.0f)
 , sonarRadius(0.0f)
 , jammerRadius(0.0f)
@@ -112,7 +113,6 @@ UnitDef::UnitDef()
 , strafeToAttack(false)
 , minCollisionSpeed(0.0f)
 , slideTolerance(0.0f)
-, maxSlope(0.0f)
 , maxHeightDif(0.0f)
 , minWaterDepth(0.0f)
 , waterline(0.0f)
@@ -172,7 +172,6 @@ UnitDef::UnitDef()
 , wantedHeight(0.0f)
 , verticalSpeed(0.0f)
 , useSmoothMesh(false)
-, canCrash(false)
 , hoverAttack(false)
 , airStrafe(false)
 , dlHoverFactor(0.0f)
@@ -214,7 +213,7 @@ UnitDef::UnitDef()
 , kamikazeDist(0.0f)
 , kamikazeUseLOS(false)
 , targfac(false)
-, canDGun(false)
+, canManualFire(false)
 , needGeo(false)
 , isFeature(false)
 , hideDamage(false)
@@ -238,7 +237,6 @@ UnitDef::UnitDef()
 , flareTime(0)
 , flareSalvoSize(0)
 , flareSalvoDelay(0)
-, smoothAnim(false)
 , canLoopbackAttack(false)
 , levelGround(false)
 , useBuildingGroundDecal(false)
@@ -252,7 +250,6 @@ UnitDef::UnitDef()
 , maxFuel(0.0f)
 , refuelTime(0.0f)
 , minAirBasePower(0.0f)
-, pieceTrailCEGRange(-1)
 , maxThisUnit(0)
 , realMetalCost(0.0f)
 , realEnergyCost(0.0f)
@@ -273,6 +270,11 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 , movedata(NULL)
 , trackType(0)
 , buildingDecalType(-1)
+, realMetalCost(0.0f)
+, realEnergyCost(0.0f)
+, realMetalUpkeep(0.0f)
+, realEnergyUpkeep(0.0f)
+, realBuildTime(0.0f)
 {
 	humanName = udTable.GetString("name", "");
 	tooltip = udTable.GetString("description", name);
@@ -299,15 +301,11 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	idleAutoHeal = udTable.GetFloat("idleAutoHeal", 10.0f) * (UNIT_SLOWUPDATE_RATE / float(GAME_SPEED));
 	idleTime     = udTable.GetInt("idleTime", 600);
 
-	losHeight = 20;
-	metalCost = udTable.GetFloat("buildCostMetal", 0.0f);
-	if (metalCost < 1.0f) {
-		metalCost = 1.0f; //avoid some nasty divide by 0 etc
-	}
-	mass = udTable.GetFloat("mass", 0.0f);
-	if (mass <= 0.0f) {
-		mass = metalCost;
-	}
+	// iff a mass value is not defined, default to metalCost
+	// (do not allow it to be zero or negative in either case)
+	metalCost = std::max(1.0f, udTable.GetFloat("buildCostMetal", 0.0f));
+	mass = std::max(1.0f, udTable.GetFloat("mass", metalCost));
+
 	energyCost = udTable.GetFloat("buildCostEnergy", 0.0f);
 	buildTime = udTable.GetFloat("buildTime", 0.0f);
 	if (buildTime < 1.0f) {
@@ -367,9 +365,12 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	collide = udTable.GetBool("collide", true);
 	onoffable = udTable.GetBool("onoffable", false);
 
-	maxSlope = Clamp(udTable.GetFloat("maxSlope", 0.0f), 0.0f, 89.0f);
-	maxHeightDif = 40 * tan(maxSlope * (PI / 180));
-	maxSlope = cos(maxSlope * (PI / 180));
+	const float maxSlopeDeg = Clamp(udTable.GetFloat("maxSlope", 0.0f), 0.0f, 89.0f);
+	const float maxSlopeRad = maxSlopeDeg * (PI / 180.0f);
+
+	// FIXME: kill the magic constant
+	maxHeightDif = 40.0f * math::tanf(maxSlopeRad);
+
 	minWaterDepth = udTable.GetFloat("minWaterDepth", -10e6f);
 	maxWaterDepth = udTable.GetFloat("maxWaterDepth", +10e6f);
 	waterline = udTable.GetFloat("waterline", 0.0f);
@@ -407,6 +408,9 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 
 	armoredMultiple = udTable.GetFloat("damageModifier", 1.0f);
 	armorType = damageArrayHandler->GetTypeFromName(name);
+
+	losHeight = udTable.GetFloat("losEmitHeight", 20.0f);
+	radarHeight = udTable.GetFloat("radarEmitHeight", 20.0f);
 
 	radarRadius    = udTable.GetInt("radarDistance",    0);
 	sonarRadius    = udTable.GetInt("sonarDistance",    0);
@@ -491,7 +495,7 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 
 	maxBank = udTable.GetFloat("maxBank", 0.8f);         // max roll
 	maxPitch = udTable.GetFloat("maxPitch", 0.45f);      // max pitch this plane tries to keep
-	turnRadius = udTable.GetFloat("turnRadius", 500.0f); // hint to CAirMoveType about required turn-radius
+	turnRadius = udTable.GetFloat("turnRadius", 500.0f); // hint to CStrafeAirMoveType about required turn-radius
 	verticalSpeed = udTable.GetFloat("verticalSpeed", 3.0f); // speed of takeoff and landing, at least for gunships
 
 	maxAileron  = udTable.GetFloat("maxAileron",  0.015f); // turn speed around roll axis
@@ -523,7 +527,8 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	LuaTable weaponsTable = udTable.SubTable("weapons");
 	ParseWeaponsTable(weaponsTable);
 
-	canDGun = udTable.GetBool("canDGun", false);
+	canManualFire = udTable.GetBool("canDGun", false); // NOTE: deprecated, remove after 0.83.*
+	canManualFire = udTable.GetBool("canManualFire", canManualFire);
 	needGeo = false;
 
 	extractRange = mapInfo->map.extractorRadius * int(extractsMetal > 0.0f);
@@ -542,22 +547,31 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 
 		movedata->unitDefRefCount += 1;
 
-		static const char* fmtString =
-			"[%s] inconsistent path-type %i for \"%s\" (move-class \"%s\"): %s, but not a %s-based movetype";
-		const char* udName = name.c_str();
-		const char* mdName = moveClass.c_str();
-
-		if (canhover) {
-			if (movedata->moveType != MoveData::Hover_Move) {
-				logOutput.Print(fmtString, __FUNCTION__, movedata->pathType, udName, mdName, "canhover", "hover");
+		if (LOG_IS_ENABLED(L_WARNING)) {
+			const char* typeStr = NULL;
+			const char* wantedTypeStr = NULL;
+			if (canhover) {
+				if (movedata->moveType != MoveData::Hover_Move) {
+					typeStr       = "canhover";
+					wantedTypeStr = "hover";
+				}
+			} else if (floater) {
+				if (movedata->moveType != MoveData::Ship_Move) {
+					typeStr       = "floater";
+					wantedTypeStr = "ship";
+				}
+			} else {
+				if (movedata->moveType != MoveData::Ground_Move) {
+					typeStr       = "!(canhover || floater)";
+					wantedTypeStr = "ground";
+				}
 			}
-		} else if (floater) {
-			if (movedata->moveType != MoveData::Ship_Move) {
-				logOutput.Print(fmtString, __FUNCTION__, movedata->pathType, udName, mdName, "floater", "ship");
-			}
-		} else {
-			if (movedata->moveType != MoveData::Ground_Move) {
-				logOutput.Print(fmtString, __FUNCTION__, movedata->pathType, udName, mdName, "!(canhover || floater)", "ground");
+			if ((typeStr != NULL) && (wantedTypeStr != NULL)) {
+				LOG_L(L_WARNING,
+						"[%s] inconsistent path-type %i for \"%s\" "
+						"(move-class \"%s\"): %s, but not a %s-based movetype",
+						__FUNCTION__, movedata->pathType, name.c_str(),
+						moveClass.c_str(), typeStr, wantedTypeStr);
 			}
 		}
 	}
@@ -585,7 +599,7 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 			drag = (1.0f / (speed / GAME_SPEED * 1.1f / maxAcc)) - (wingAngle * wingAngle * wingDrag);
 			drag = Clamp(drag, 0.0f, 1.0f);
 		} else {
-			//shouldn't be needed since drag is only used in CAirMoveType anyway,
+			//shouldn't be needed since drag is only used in CStrafeAirMoveType anyway,
 			//and aircraft without acceleration or speed aren't common :)
 			//initializing it anyway just for safety
 			drag = 0.005f;
@@ -611,8 +625,8 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 
 	// Prevent a division by zero in experience calculations.
 	if (power < 1.0e-3f) {
-		logOutput.Print("Unit %s is really cheap? %f", humanName.c_str(), power);
-		logOutput.Print("This can cause a division by zero in experience calculations.");
+		LOG_L(L_WARNING, "Unit %s is really cheap? %f", humanName.c_str(), power);
+		LOG_L(L_WARNING, "This can cause a division by zero in experience calculations.");
 		power = 1.0e-3f;
 	}
 
@@ -620,8 +634,10 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 
 	// footprint sizes are assumed to be expressed in TA-engine units;
 	// Spring's heightmap resolution is double the footprint (yardmap)
-	// resolution, so we scale the values
-	// NOTE that this is done for the MoveData footprints as well
+	// resolution, so we scale the values (which are not allowed to be
+	// 0)
+	// NOTE that this is done for the FeatureDef and MoveData footprints
+	// as well
 	xsize = std::max(1 * 2, (udTable.GetInt("footprintX", 1) * 2));
 	zsize = std::max(1 * 2, (udTable.GetInt("footprintZ", 1) * 2));
 
@@ -651,9 +667,7 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	flareSalvoSize  = udTable.GetInt("flareSalvoSize",  4);
 	flareSalvoDelay = udTable.GetInt("flareSalvoDelay", 0) * GAME_SPEED;
 
-	smoothAnim = udTable.GetBool("smoothAnim", false);
 	canLoopbackAttack = udTable.GetBool("canLoopbackAttack", false);
-	canCrash = udTable.GetBool("canCrash", true);
 	levelGround = udTable.GetBool("levelGround", true);
 	strafeToAttack = udTable.GetBool("strafeToAttack", false);
 
@@ -696,23 +710,19 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 		}
 	}
 
-	LuaTable sfxTable = udTable.SubTable("SFXTypes");
-	LuaTable expTable = sfxTable.SubTable("explosionGenerators");
+	const LuaTable& sfxTable = udTable.SubTable("SFXTypes");
+	const LuaTable& modelCEGTable = sfxTable.SubTable(     "explosionGenerators");
+	const LuaTable& pieceCEGTable = sfxTable.SubTable("pieceExplosionGenerators");
 
-	for (int expNum = 1; expNum <= 1024; expNum++) {
-		std::string expsfx = expTable.GetString(expNum, "");
+	std::vector<int> modelCEGKeys; modelCEGTable.GetKeys(modelCEGKeys);
+	std::vector<int> pieceCEGKeys; pieceCEGTable.GetKeys(pieceCEGKeys);
 
-		if (expsfx == "") {
-			break;
-		} else {
-			sfxExplGenNames.push_back(expsfx);
-		}
+	for (unsigned int n = 0; n < modelCEGKeys.size(); n++) {
+		modelCEGTags.push_back(modelCEGTable.GetString(modelCEGKeys[n], ""));
 	}
-
-	// we use range in a modulo operation, so it needs to be >= 1
-	pieceTrailCEGTag = udTable.GetString("pieceTrailCEGTag", "");
-	pieceTrailCEGRange = udTable.GetInt("pieceTrailCEGRange", 1);
-	pieceTrailCEGRange = std::max(pieceTrailCEGRange, 1);
+	for (unsigned int n = 0; n < pieceCEGKeys.size(); n++) {
+		pieceCEGTags.push_back(pieceCEGTable.GetString(pieceCEGKeys[n], ""));
+	}
 
 	// custom parameters table
 	udTable.SubTable("customParams").GetMap(customParams);
@@ -735,7 +745,8 @@ UnitDef::~UnitDef()
 	collisionVolume = NULL;
 
 	for (std::vector<IExplosionGenerator*>::iterator it = sfxExplGens.begin(); it != sfxExplGens.end(); ++it) {
-		delete *it;
+		explGenHandler->UnloadGenerator(*it);
+		*it = NULL;
 	}
 }
 
@@ -746,9 +757,16 @@ S3DModel* UnitDef::LoadModel() const
 		this->modelDef.model = modelParser->Load3DModel(this->modelDef.modelPath, this->modelCenterOffset);
 		this->modelDef.modelTextures["tex1"] = this->modelDef.model->tex1;
 		this->modelDef.modelTextures["tex2"] = this->modelDef.model->tex2;
+	} else {
+		eventHandler.LoadedModelRequested();
 	}
 
 	return (this->modelDef.model);
+}
+
+float UnitDef::GetModelRadius() const
+{
+	return (LoadModel()->radius);
 }
 
 
@@ -777,8 +795,8 @@ void UnitDef::ParseWeaponsTable(const LuaTable& weaponsTable)
 
 		while (weapons.size() < w) {
 			if (!noWeaponDef) {
-				logOutput.Print("Error: Spring requires a NOWEAPON weapon type "
-				                "to be present as a placeholder for missing weapons");
+				LOG_L(L_ERROR, "Spring requires a NOWEAPON weapon type "
+						"to be present as a placeholder for missing weapons");
 				break;
 			} else {
 				weapons.push_back(UnitDefWeapon());

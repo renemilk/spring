@@ -1,11 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Game/Camera.h"
 #include "GenericParticleProjectile.h"
-#include "GlobalUnsynced.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/ColorMap.h"
 #include "Sim/Projectiles/ProjectileHandler.h"

@@ -3,8 +3,7 @@
 !addPluginDir "nsis_plugins"
 
 ; Use the 7zip-like compressor
-SetCompress force
-SetCompressor /SOLID /FINAL lzma
+SetCompressor /FINAL /SOLID lzma
 
 
 !include "springsettings.nsh"
@@ -35,7 +34,7 @@ SetCompressor /SOLID /FINAL lzma
 ; Welcome page
 !insertmacro MUI_PAGE_WELCOME
 ; Licensepage
-!insertmacro MUI_PAGE_LICENSE "..\doc\gpl-2.0.txt"
+!insertmacro MUI_PAGE_LICENSE "..\gpl-2.0.txt"
 
 ; Components page
 !insertmacro MUI_PAGE_COMPONENTS
@@ -85,96 +84,52 @@ VAR REGISTRY ; if 1 registry values are written
 !include "include\fileassoc.nsh"
 !include "include\fileExistChecks.nsh"
 !include "include\fileMisc.nsh"
+!include "include\extractFile.nsh"
 !include "include\checkrunning.nsh"
-!include "include\aiHelpers.nsh"
 !include "include\getParameterValue.nsh"
-
-;!include "sections\ensureDotNet.nsh" ; deprecated, setup of zero-k installs .Net itself
 
 
 ${!echonow} ""
 ${!echonow} "Base dir:   <engine-source-root>/installer/"
 
-; Set default values for undefined vars
-!ifndef CONTENT_DIR
-	!define CONTENT_DIR "..\cont"
-!endif
-${!defineifdirexists} CONTENT_DIR_EXISTS "${CONTENT_DIR}"
-!ifndef CONTENT_DIR_EXISTS
-	!error "Could not find the content dir at '${CONTENT_DIR}', try setting CONTENT_DIR manually."
-	!undef CONTENT_DIR_EXISTS
-!endif
-${!echonow} "Using CONTENT_DIR:   ${CONTENT_DIR}"
-!ifndef DOC_DIR
-	!define DOC_DIR "..\doc"
-!endif
-${!defineifdirexists} DOC_DIR_EXISTS "${DOC_DIR}"
-!ifndef DOC_DIR_EXISTS
-	!error "Could not find the documentation dir at '${DOC_DIR}', try setting DOC_DIR manually."
-	!undef DOC_DIR_EXISTS
-!endif
-${!echonow} "Using DOC_DIR:       ${DOC_DIR}"
-!ifndef MINGWLIBS_DIR
-	!define MINGWLIBS_DIR "..\mingwlibs"
-!endif
-${!defineifdirexists} MINGWLIBS_DIR_EXISTS "${MINGWLIBS_DIR}"
-!ifndef MINGWLIBS_DIR_EXISTS
-	!error "Could not find the MinGW libraries dir at '${MINGWLIBS_DIR}', try setting MINGWLIBS_DIR manually."
-	!undef MINGWLIBS_DIR_EXISTS
-!endif
-${!echonow} "Using MINGWLIBS_DIR: ${MINGWLIBS_DIR}"
-!ifndef BUILD_DIR
-	!ifndef DIST_DIR
-		!error "Neither BUILD_DIR nor DIST_DIR are defined. Define only one of the two, depending on whether you want to generate the installer from the install- or the build-directory."
-	!endif
-	${!defineifdirexists} DIST_DIR_EXISTS "${DIST_DIR}"
-	!ifndef DIST_DIR_EXISTS
-		!error "Could not find the distribution dir at '${DIST_DIR}'. Make sure you defined DIST_DIR correctly."
-		!undef DIST_DIR_EXISTS
-	!endif
-	${!echonow} "Using DIST_DIR:      ${DIST_DIR}"
-	!define BUILD_OR_DIST_DIR "${DIST_DIR}"
-!endif
-!ifdef BUILD_DIR
-	!ifdef DIST_DIR
-		!error "Both BUILD_DIR and DIST_DIR are defined. Define only one of the two, depending on whether you want to generate the installer from the install- or the build-directory."
-	!endif
-	${!defineifdirexists} BUILD_DIR_EXISTS "${BUILD_DIR}"
-	!ifndef BUILD_DIR_EXISTS
-		!error "Could not find the build dir at '${BUILD_DIR}'. Make sure you defined BUILD_DIR correctly."
-		!undef BUILD_DIR_EXISTS
-	!endif
-	${!echonow} "Using BUILD_DIR:     ${BUILD_DIR}"
-	; This allows us to easily use build products from an out of source build,
-	; without the need to run 'make install'
-	!define USE_BUILD_DIR
-	!define BUILD_OR_DIST_DIR "${BUILD_DIR}"
+!ifndef MIN_PORTABLE_ARCHIVE
+	!error "MIN_PORTABLE_ARCHIVE undefined: please specifiy where minimal-portable 7z-archive which contains the spring-engine is"
+!else
+	${!echonow} "Using MIN_PORTABLE_ARCHIVE: ${MIN_PORTABLE_ARCHIVE}"
 !endif
 
-SectionGroup /e "!Engine"
-	Section "Main application (req)" SEC_MAIN
-		; make this section read-only -> user can not deselect it
-		SectionIn RO
+!ifndef ARCHIVEMOVER
+	!warning "ARCHIVEMOVER not defined"
+!else
+	${!echonow} "Using ARCHIVEMOVER:         ${ARCHIVEMOVER}"
+!endif
 
-		!define INSTALL
-			${!echonow} "Processing: main"
-			!include "sections\main.nsh"
-			${!echonow} "Processing: luaui"
-			!include "sections\luaui.nsh"
-		!undef INSTALL
-	SectionEnd
+!ifndef RAPID_ARCHIVE
+	!warning "RAPID_ARCHIVE not defined"
+!else
+	${!echonow} "Using RAPID_ARCHIVE:        ${RAPID_ARCHIVE}"
+!endif
 
-	${!defineiffileexists} GML_BUILD_EXISTS "${BUILD_OR_DIST_DIR}\spring-multithreaded.exe"
-	!ifdef GML_BUILD_EXISTS
-		Section "Multi-threaded executable" SEC_GML
-			${!echonow} "Processing: spring-multithreaded.exe"
-			SetOutPath "$INSTDIR"
-			SetOverWrite on
-			File "${BUILD_OR_DIST_DIR}\spring-multithreaded.exe"
-		SectionEnd
-		!undef GML_BUILD_EXISTS
-	!endif
-SectionGroupEnd
+!ifndef NSI_UNINSTALL_FILES
+	!warning "NSI_UNINSTALL_FILES not defined"
+!else
+	${!echonow} "Using NSI_UNINSTALL_FILES:  ${NSI_UNINSTALL_FILES}"
+!endif
+
+
+Section "Engine" SEC_MAIN
+	; make this section read-only -> user can not deselect it
+	SectionIn RO
+
+	!define INSTALL
+		${!echonow} "Processing: main"
+		!include "sections\main.nsh"
+		${!echonow} "Processing: springsettings"
+		!include "sections\springsettings.nsh"
+		${!echonow} "Processing: deprecated"
+	        !include "sections\deprecated.nsh"
+	!undef INSTALL
+SectionEnd
 
 
 SectionGroup "Multiplayer battlerooms"
@@ -219,13 +174,14 @@ SectionGroup "Tools"
 			!include "sections\archivemover.nsh"
 		!undef INSTALL
 	SectionEnd
-
+!ifdef RAPID_ARCHIVE
 	Section "Simple spring-rapid downloader" SEC_RAPID
 		!define INSTALL
 			${!echonow} "Processing: rapid"
-			!include "sections\rapid.nsh"
+			!insertmacro extractFile "${RAPID_ARCHIVE}" "rapid-spring-latest-win32.7z" rapid
 		!undef INSTALL
 	SectionEnd
+!endif
 SectionGroupEnd
 
 
@@ -245,38 +201,25 @@ Section /o "Portable" SEC_PORTABLE
 SectionEnd
 
 
-SectionGroup "Skirmish AI plugins (Bots)"
-	!insertmacro SkirmishAIInstSection "AAI"
-	!insertmacro SkirmishAIInstSection "KAIK"
-	!insertmacro SkirmishAIInstSection "RAI"
-	!insertmacro SkirmishAIInstSection "E323AI"
-SectionGroupEnd
-
-
 !include "sections\sectiondesc.nsh"
-
-Section -Documentation
-	!define INSTALL
-		${!echonow} "Processing: docs"
-		!include "sections\docs.nsh"
-	!undef INSTALL
-SectionEnd
 
 Section -Post
 	${!echonow} "Processing: Registry entries"
-	IntOp $R0 ${SEC_PORTABLE} & ${SF_SELECTED} ; check if in normal mode
-	${If} $R0 != ${SF_SELECTED}
+	${IfNot} ${SectionIsSelected} ${SEC_PORTABLE}
+		; make non-portable
+		Delete "$INSTDIR\springsettings.cfg"
+		; Create uninstaller
 		WriteUninstaller "$INSTDIR\uninst.exe"
-	${EndIf}
-	${If} $REGISTRY = 1
-		WriteRegStr ${PRODUCT_ROOT_KEY} "${PRODUCT_DIR_REGKEY}" "@" "$INSTDIR\spring.exe"
-		WriteRegStr ${PRODUCT_ROOT_KEY} "${PRODUCT_DIR_REGKEY}" "Path" "$INSTDIR"
-		WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
-		WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
-		WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\spring.exe"
-		WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
-		WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
-		WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+		${If} $REGISTRY = 1
+			WriteRegStr ${PRODUCT_ROOT_KEY} "${PRODUCT_DIR_REGKEY}" "@" "$INSTDIR\spring.exe"
+			WriteRegStr ${PRODUCT_ROOT_KEY} "${PRODUCT_DIR_REGKEY}" "Path" "$INSTDIR"
+			WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
+			WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
+			WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\spring.exe"
+			WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+			WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
+			WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+		${EndIf}
 	${EndIf}
 SectionEnd
 
@@ -290,10 +233,6 @@ Function .onInit
 	${CheckExecutableRunning} "CADownloader.exe" "CA Downloader"
 	${CheckExecutableRunning} "springsettings.exe" "Spring Settings"
 	skiprunchecks:
-
-	; The core cannot be deselected
-	IntOp $0 ${SEC_MAIN} | ${SF_RO}
-	SectionSetFlags ${SEC_MAIN} $0 ; make the core section read only
 
 	; enable/disable sections depending on parameters
 	!include "sections/SetupSections.nsh"
@@ -316,24 +255,21 @@ Section Uninstall
 	${!echonow} "Processing: Uninstall"
 
 	!include "sections\main.nsh"
+	!include "sections\deprecated.nsh"
+	!include "sections\springsettings.nsh"
 
 	Delete "$INSTDIR\spring-multithreaded.exe"
 
-	!include "sections\docs.nsh"
 	!include "sections\shortcuts_startMenu.nsh"
 	!include "sections\shortcuts_desktop.nsh"
 	!include "sections\archivemover.nsh"
 	!include "sections\portable.nsh"
 	!include "sections\zeroK.nsh"
 	!include "sections\tasServer.nsh"
-	!include "sections\rapid.nsh"
-	!insertmacro DeleteSkirmishAI "AAI"
-	!insertmacro DeleteSkirmishAI "KAIK"
-	!insertmacro DeleteSkirmishAI "RAI"
-	!insertmacro DeleteSkirmishAI "E323AI"
+	!ifdef NSI_UNINSTALL_FILES
+	!include "${NSI_UNINSTALL_FILES}"
+	!endif
 	!include "sections\springlobby.nsh"
-	!include "sections\luaui.nsh"
-
 	; All done
 	RMDir "$INSTDIR"
 

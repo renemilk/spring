@@ -1,12 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
-
-#include <set>
-#include <list>
-#include <cctype>
-using namespace std;
+#include "System/mmgr.h"
 
 #include "LuaUnsyncedCall.h"
 
@@ -18,7 +12,10 @@ using namespace std;
 #include "LuaRules.h"
 #include "LuaHashString.h"
 #include "LuaUtils.h"
-#include "LogOutput.h"
+
+#include <set>
+#include <list>
+#include <cctype>
 
 
 /******************************************************************************/
@@ -74,7 +71,7 @@ static int CallHook(lua_State* L)
 		if (lh == NULL) {
 			return 0; // not running
 		}
-		lua_pushboolean(L, lh->HasUnsyncedXCall(funcName));
+		lua_pushboolean(L, lh->HasUnsyncedXCall(L, funcName));
 		return 1;
 	}
 	return 0;

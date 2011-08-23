@@ -26,6 +26,30 @@ class CStdExplosionGenerator;
 class CGameHelper : public CExplosionCreator
 {
 public:
+	enum {
+		TEST_ALLIED  = 1,
+		TEST_NEUTRAL = 2,
+	};
+
+	struct ExplosionParams {
+		const float3& pos;
+		const float3& dir;
+		const DamageArray& damages;
+		const WeaponDef* weaponDef;
+
+		CUnit* owner;
+		CUnit* hitUnit;
+		CFeature* hitFeature;
+
+		float areaOfEffect; // radius
+		float edgeEffectiveness;
+		float explosionSpeed;
+		float gfxMod;
+		bool impactOnly;
+		bool ignoreOwner;
+		bool damageGround;
+	};
+
 	CGameHelper();
 	~CGameHelper();
 
@@ -42,8 +66,8 @@ public:
 	float3 GetUnitErrorPos(const CUnit* unit, int allyteam);
 
 	void BuggerOff(float3 pos, float radius, bool spherical, bool forced, int teamId, CUnit* exclude);
-	float3 Pos2BuildPos(const BuildInfo& buildInfo);
-	float3 Pos2BuildPos(const float3& pos, const UnitDef* ud);
+	float3 Pos2BuildPos(const BuildInfo& buildInfo, bool synced);
+	float3 Pos2BuildPos(const float3& pos, const UnitDef* ud, bool synced);
 
 	/**
 	 * @param minDist measured in 1/(SQUARE_SIZE * 2) = 1/16 of full map resolution.
@@ -52,14 +76,11 @@ public:
 
 	void Update();
 	void GenerateWeaponTargets(const CWeapon* weapon, const CUnit* lastTargetUnit, std::multimap<float, CUnit*>& targets);
-	void DoExplosionDamage(CUnit* unit, const float3& expPos, float expRad, float expSpeed, bool ignoreOwner, CUnit* owner, float edgeEffectiveness, const DamageArray& damages, int weaponId);
-	void DoExplosionDamage(CFeature* feature, const float3& expPos, float expRad, const DamageArray& damages);
-	void Explosion(float3 pos, const DamageArray& damages, float radius, float edgeEffectiveness, float explosionSpeed, CUnit* owner, bool damageGround, float gfxMod, bool ignoreOwner, bool impactOnly, IExplosionGenerator* explosionGraphics, CUnit* hit, const float3& impactDir, int weaponId, CFeature* hitfeature = NULL);
 
-	enum {
-		TEST_ALLIED  = 1,
-		TEST_NEUTRAL = 2,
-	};
+	void DoExplosionDamage(CUnit* unit, CUnit* owner, const float3& expPos, float expRad, float expSpeed, bool ignoreOwner, float edgeEffectiveness, const DamageArray& damages, int weaponDefID);
+	void DoExplosionDamage(CFeature* feature, const float3& expPos, float expRad, const DamageArray& damages);
+
+	void Explosion(const ExplosionParams& params);
 
 private:
 	CStdExplosionGenerator* stdExplosionGenerator;

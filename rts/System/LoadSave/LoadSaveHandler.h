@@ -1,7 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef LOADSAVEHANDLER_H
-#define LOADSAVEHANDLER_H
+#ifndef _LOAD_SAVE_HANDLER_H
+#define _LOAD_SAVE_HANDLER_H
+
+#include <string>
+
 
 class ILoadSaveHandler
 {
@@ -24,4 +27,4 @@ public:
 	std::string modName;
 };
 
-#endif // LOADSAVEHANDLER_H
+#endif // _LOAD_SAVE_HANDLER_H

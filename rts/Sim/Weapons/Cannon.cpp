@@ -1,20 +1,18 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "Cannon.h"
 #include "Game/TraceRay.h"
-#include "LogOutput.h"
 #include "Map/Ground.h"
 #include "Map/MapInfo.h"
 #include "Sim/Projectiles/Unsynced/HeatCloudProjectile.h"
 #include "Sim/Projectiles/Unsynced/SmokeProjectile.h"
 #include "Sim/Projectiles/WeaponProjectiles/ExplosiveProjectile.h"
 #include "Sim/Units/Unit.h"
-#include "Sync/SyncTracer.h"
+#include "System/Sync/SyncTracer.h"
 #include "WeaponDefHandler.h"
-#include "myMath.h"
-#include "FastMath.h"
-#include "mmgr.h"
+#include "System/myMath.h"
+#include "System/FastMath.h"
+#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CCannon, CWeapon, (NULL));
 
@@ -131,13 +129,16 @@ bool CCannon::TryTarget(const float3 &pos, bool userTarget, CUnit* unit)
 	}
 	flatdir /= flatlength;
 
-	float gc = ground->TrajectoryGroundCol(weaponMuzzlePos, flatdir, flatlength - 10,
-			dir.y , gravity / (projectileSpeed * projectileSpeed) * 0.5f);
-	if (gc > 0) {
+	const float linear = dir.y;
+	const float quadratic = gravity / (projectileSpeed * projectileSpeed) * 0.5f;
+	const float gc = ((collisionFlags & Collision::NOGROUND) == 0)?
+		ground->TrajectoryGroundCol(weaponMuzzlePos, flatdir, flatlength - 10, linear, quadratic):
+		-1.0f;
+
+	if (gc > 0.0f) {
 		return false;
 	}
 
-	const float quadratic = gravity / (projectileSpeed * projectileSpeed) * 0.5f;
 	const float spread =
 		((accuracy + sprayAngle) * 0.6f) *
 		((1.0f - owner->limExperience * weaponDef->ownerExpAccWeight) * 0.9f);
@@ -162,7 +163,7 @@ void CCannon::FireImpl(void)
 	dir += 
 		(gs->randVector() * sprayAngle + salvoError) *
 		(1.0f - owner->limExperience * weaponDef->ownerExpAccWeight);
-	dir.Normalize();
+	dir.SafeNormalize();
 
 	int ttl = 0;
 	float sqSpeed2D = dir.SqLength2D() * projectileSpeed * projectileSpeed;
@@ -211,46 +212,55 @@ float3 CCannon::GetWantedDir(const float3& diff)
 	// try to cache results, sacrifice some (not much too much even for a pewee) accuracy
 	// it saves a dozen or two expensive calculations per second when 5 guardians
 	// are shooting at several slow- and fast-moving targets
-	if (fabs(diff.x-lastDiff.x) < SQUARE_SIZE/4.f
-			&& fabs(diff.y-lastDiff.y) < SQUARE_SIZE/4.f
-			&& fabs(diff.z-lastDiff.z) < SQUARE_SIZE/4.f) {
+	if (fabs(diff.x - lastDiff.x) < (SQUARE_SIZE / 4.0f) &&
+		fabs(diff.y - lastDiff.y) < (SQUARE_SIZE / 4.0f) &&
+		fabs(diff.z - lastDiff.z) < (SQUARE_SIZE / 4.0f)) {
 		return lastDir;
 	}
 
-	float Dsq = diff.SqLength();
-	float DFsq = diff.SqLength2D();
-	float g = gravity;
-	float v = projectileSpeed;
-	float dy = diff.y;
-	float dxz = math::sqrt(DFsq);
-	float Vxz;
-	float Vy;
-	if(Dsq == 0) {
-		Vxz = 0;
+	const float Dsq = diff.SqLength();
+	const float DFsq = diff.SqLength2D();
+	const float& g = gravity;
+	const float& v = projectileSpeed;
+	const float dy  = diff.y;
+	const float dxz = math::sqrt(DFsq);
+	float Vxz = 0.0f;
+	float Vy  = 0.0f;
+
+	if (Dsq == 0.0f) {
 		Vy = highTrajectory ? v : -v;
 	} else {
-		float root1 = v*v*v*v + 2*v*v*g*dy - g*g*DFsq;
-		if(root1 >= 0) {
-			float root2 = 2 * DFsq * Dsq * ( v * v + g * dy + (highTrajectory ? -1 : 1) * math::sqrt(root1));
-			if(root2 >= 0) {
-				Vxz = math::sqrt(root2) / (2 * Dsq);
-				Vy = (dxz == 0 || Vxz == 0) ? v : (Vxz*dy/dxz - dxz*g/(2*Vxz));
-			} else {
-				Vxz = 0;
-				Vy = 0;
+		// FIXME: temporary safeguards against FP overflow
+		// (introduced by extreme off-map unit positions; the term
+		// DFsq * Dsq * ... * dy should never even approach 1e38)
+		if (Dsq < 1e12f && fabs(dy) < 1e6f) {
+			const float root1 = v*v*v*v + 2.0f*v*v*g*dy - g*g*DFsq;
+
+			if (root1 >= 0.0f) {
+				const float root2 = 2.0f * DFsq * Dsq * (v * v + g * dy + (highTrajectory ? -1.0f : 1.0f) * math::sqrt(root1));
+
+				if (root2 >= 0.0f) {
+					Vxz = math::sqrt(root2) / (2.0f * Dsq);
+					Vy = (dxz == 0.0f || Vxz == 0.0f) ? v : (Vxz * dy / dxz  -  dxz * g / (2.0f * Vxz));
+				}
 			}
-		} else {
-			Vxz = 0;
-			Vy = 0;
 		}
 	}
-	float3 dir(diff.x, 0, diff.z);
-	dir.SafeNormalize();
-	dir *= Vxz;
-	dir.y = Vy;
-	dir.SafeNormalize();
-	lastDiff = diff;
-	lastDir = dir;
+
+	float3 dir = ZeroVector;
+
+	if (Vxz != 0.0f || Vy != 0.0f) {
+		dir.x = diff.x;
+		dir.z = diff.z;
+		dir.SafeNormalize();
+		dir *= Vxz;
+		dir.y = Vy;
+		dir.SafeNormalize();
+
+		lastDiff = diff;
+		lastDir = dir;
+	}
+
 	return dir;
 }
 

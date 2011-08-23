@@ -72,7 +72,7 @@ cRAI::cRAI()
 	SWM=0;
 	cb=0;
 	frame=0;
-	memset(eventList, NULL, EVENT_LIST_SIZE);
+	memset(eventList, 0, EVENT_LIST_SIZE);
 	TM=0;
 	RM=0;
 	UM=0;
@@ -518,10 +518,6 @@ void cRAI::UnitIdle(int unit)
 	if( RAIDEBUGGING ) *l<<"#";
 }
 
-void cRAI::GotChatMessage(const char* msg,int player)
-{
-
-}
 
 void cRAI::UnitDamaged(int unit,int attacker,float damage,float3 dir)
 {

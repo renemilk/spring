@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "AdvTreeDrawer.h"
 #include "AdvTreeGenerator.h"
@@ -14,18 +13,16 @@
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Features/Feature.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/FBO.h"
 #include "Rendering/GL/VertexArray.h"
-#include "Rendering/Shaders/ShaderHandler.hpp"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/ShaderHandler.h"
+#include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/ShadowHandler.h"
 #include "System/Exceptions.h"
-#include "System/LogOutput.h"
 #include "System/Matrix44f.h"
-#include "System/GlobalUnsynced.h"
 
 static const float TEX_LEAF_START_Y1 = 0.001f;
 static const float TEX_LEAF_END_Y1   = 0.124f;
@@ -445,7 +442,7 @@ void CAdvTreeDrawer::Draw(float treeDistance, bool drawReflection)
 	glEnable(GL_ALPHA_TEST);
 	glEnable(GL_TEXTURE_2D);
 
-	IBaseSky::SetFog();
+	ISky::SetupFog();
 
 	if (shadowHandler->shadowsLoaded && !gd->DrawExtraTex()) {
 		glActiveTexture(GL_TEXTURE1);

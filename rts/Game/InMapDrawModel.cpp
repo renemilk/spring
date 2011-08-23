@@ -1,14 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "InMapDrawModel.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/PlayerHandler.h"
 #include "Game/TeamController.h"
 #include "Map/Ground.h"
 #include "Sim/Misc/TeamHandler.h"
-#include "System/GlobalUnsynced.h"
 #include "System/EventHandler.h"
 #include "System/BaseNetProtocol.h"
 #include "System/creg/STL_List.h"
@@ -20,6 +19,8 @@ CR_BIND(CInMapDrawModel, );
 
 CR_REG_METADATA(CInMapDrawModel, (
 	CR_MEMBER(drawQuads),
+	CR_MEMBER(numPoints),
+	CR_MEMBER(numLines),
 	CR_RESERVED(4)
 ));
 
@@ -50,11 +51,11 @@ CR_REG_METADATA_SUB(CInMapDrawModel, MapLine, (
 
 CR_BIND(CInMapDrawModel::DrawQuad, );
 
-CR_REG_METADATA_SUB(CInMapDrawModel, DrawQuad, (
+//CR_REG_METADATA_SUB(CInMapDrawModel, DrawQuad, (
 //	CR_MEMBER(points), // TODO this is only left out due to lazyness
 //	CR_MEMBER(lines), // TODO this is only left out due to lazyness
-	CR_RESERVED(4)
-));
+//	CR_RESERVED(4)
+//));
 
 
 
@@ -68,6 +69,8 @@ CInMapDrawModel::CInMapDrawModel()
 	: drawQuadsX(gs->mapx / DRAW_QUAD_SIZE)
 	, drawQuadsY(gs->mapy / DRAW_QUAD_SIZE)
 	, drawAllMarks(false)
+	, numPoints(0)
+	, numLines(0)
 {
 	drawQuads.resize(drawQuadsX * drawQuadsY);
 }
@@ -130,7 +133,7 @@ bool CInMapDrawModel::AddPoint(const float3& constPos, const std::string& label,
 
 	float3 pos = constPos;
 	pos.CheckInBounds();
-	pos.y = ground->GetHeightAboveWater(pos.x, pos.z) + 2.0f;
+	pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false) + 2.0f;
 
 	// event clients may process the point
 	// if their owner is allowed to see it
@@ -146,6 +149,8 @@ bool CInMapDrawModel::AddPoint(const float3& constPos, const std::string& label,
 	const int quad = int(pos.z * QUAD_SCALE) * drawQuadsX +
 	                 int(pos.x * QUAD_SCALE);
 	drawQuads[quad].points.push_back(point);
+
+	numPoints++;
 
 	return true;
 }
@@ -165,8 +170,8 @@ bool CInMapDrawModel::AddLine(const float3& constPos1, const float3& constPos2, 
 	float3 pos2 = constPos2;
 	pos1.CheckInBounds();
 	pos2.CheckInBounds();
-	pos1.y = ground->GetHeightAboveWater(pos1.x, pos1.z) + 2.0f;
-	pos2.y = ground->GetHeightAboveWater(pos2.x, pos2.z) + 2.0f;
+	pos1.y = ground->GetHeightAboveWater(pos1.x, pos1.z, false) + 2.0f;
+	pos2.y = ground->GetHeightAboveWater(pos2.x, pos2.z, false) + 2.0f;
 
 	if (AllowedMsg(sender) && eventHandler.MapDrawCmd(playerID, MAPDRAW_LINE, &pos1, &pos2, NULL)) {
 		return false;
@@ -177,6 +182,8 @@ bool CInMapDrawModel::AddLine(const float3& constPos1, const float3& constPos2, 
 	const int quad = int(pos1.z * QUAD_SCALE) * drawQuadsX +
 	                 int(pos1.x * QUAD_SCALE);
 	drawQuads[quad].lines.push_back(line);
+
+	numLines++;
 
 	return true;
 }
@@ -193,7 +200,7 @@ void CInMapDrawModel::EraseNear(const float3& constPos, int playerID)
 
 	float3 pos = constPos;
 	pos.CheckInBounds();
-	pos.y = ground->GetHeightAboveWater(pos.x, pos.z) + 2.0f;
+	pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false) + 2.0f;
 
 	if (AllowedMsg(sender) && eventHandler.MapDrawCmd(playerID, MAPDRAW_ERASE, &pos, NULL, NULL)) {
 		return;
@@ -215,6 +222,7 @@ void CInMapDrawModel::EraseNear(const float3& constPos, int playerID)
 			for (pi = dq->points.begin(); pi != dq->points.end(); /* none */) {
 				if (pi->GetPos().SqDistance2D(pos) < (radius*radius) && (pi->IsBySpectator() == sender->spectator)) {
 					pi = dq->points.erase(pi);
+					numPoints--;
 				} else {
 					++pi;
 				}
@@ -224,6 +232,7 @@ void CInMapDrawModel::EraseNear(const float3& constPos, int playerID)
 				// TODO maybe erase on pos2 too?
 				if (li->GetPos1().SqDistance2D(pos) < (radius*radius) && (li->IsBySpectator() == sender->spectator)) {
 					li = dq->lines.erase(li);
+					numLines--;
 				} else {
 					++li;
 				}
@@ -239,6 +248,8 @@ void CInMapDrawModel::EraseAll()
 		drawQuads[n].points.clear();
 		drawQuads[n].lines.clear();
 	}
+	numPoints = 0;
+	numLines = 0;
 
 	// TODO check if this is needed
 	//visibleLabels.clear();

@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef _SSKIRMISHAICALLBACKIMPL_H
-#define	_SSKIRMISHAICALLBACKIMPL_H
+#ifndef S_SKIRMISH_AI_CALLBACK_IMPL_H
+#define	S_SKIRMISH_AI_CALLBACK_IMPL_H
 
 // Doc-comments for the functions in this header can be found in this file:
 // rts/ExternalAI/Interface/SSkirmishAICallback.h
@@ -492,7 +492,7 @@ EXPORT(float            ) skirmishAiCallback_UnitDef_getKamikazeDist(int skirmis
 
 EXPORT(bool             ) skirmishAiCallback_UnitDef_isTargetingFacility(int skirmishAIId, int unitDefId);
 
-EXPORT(bool             ) skirmishAiCallback_UnitDef_isAbleToDGun(int skirmishAIId, int unitDefId);
+EXPORT(bool             ) skirmishAiCallback_UnitDef_canManualFire(int skirmishAIId, int unitDefId);
 
 EXPORT(bool             ) skirmishAiCallback_UnitDef_isNeedGeo(int skirmishAIId, int unitDefId);
 
@@ -1096,8 +1096,6 @@ EXPORT(int              ) skirmishAiCallback_WeaponDef_getFlightTime(int skirmis
 
 EXPORT(float            ) skirmishAiCallback_WeaponDef_getCost(int skirmishAIId, int weaponDefId, int resourceId);
 
-EXPORT(float            ) skirmishAiCallback_WeaponDef_getSupplyCost(int skirmishAIId, int weaponDefId);
-
 EXPORT(int              ) skirmishAiCallback_WeaponDef_getProjectilesPerShot(int skirmishAIId, int weaponDefId);
 
 //EXPORT(int              ) skirmishAiCallback_WeaponDef_getTdfId(int skirmishAIId, int weaponDefId);
@@ -1276,10 +1274,19 @@ class CAICallback;
 class CAICheats;
 
 // for engine internal use only
+
+/**
+ * Create the C Skirmish AI callback instance for a specific AI.
+ * @see skirmishAiCallback_release
+ */
 SSkirmishAICallback* skirmishAiCallback_getInstanceFor(int skirmishAIId, int teamId, CAICallback* aiCallback, CAICheats* aiCheats);
 
+/**
+ * Releases the C Skirmish AI callback instance for a specific AI.
+ * @see skirmishAiCallback_getInstanceFor
+ */
 void skirmishAiCallback_release(int skirmishAIId);
 
 #endif // defined __cplusplus && !defined BUILDING_AI
 
-#endif // _SSKIRMISHAICALLBACKIMPL_H
+#endif // S_SKIRMISH_AI_CALLBACK_IMPL_H

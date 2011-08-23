@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "InputReceiver.h"
 #include "Rendering/GL/myGL.h"
@@ -107,7 +106,7 @@ CInputReceiver::ContainerBox::ContainerBox()
 {
 }
 
-CInputReceiver::ContainerBox CInputReceiver::ContainerBox::operator+(CInputReceiver::ContainerBox other)
+CInputReceiver::ContainerBox CInputReceiver::ContainerBox::operator+(CInputReceiver::ContainerBox other) const
 {
 	ContainerBox b;
 	b.x1 = x1 + other.x1;

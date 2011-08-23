@@ -1,12 +1,12 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
-#include "creg/STL_List.h"
+#include "System/mmgr.h"
+#include "System/creg/STL_List.h"
 #include "WeaponDefHandler.h"
 #include "Weapon.h"
 #include "Game/GameHelper.h"
 #include "Game/Player.h"
+#include "Game/TraceRay.h"
 #include "Lua/LuaRules.h"
 #include "Map/Ground.h"
 #include "Sim/Misc/CollisionHandler.h"
@@ -287,7 +287,7 @@ void CWeapon::Update()
 			lastRequest = gs->frameNum;
 
 			const float heading = GetHeadingFromVectorF(wantedDir.x, wantedDir.z);
-			const float pitch = asin(wantedDir.dot(owner->updir));
+			const float pitch = math::asin(Clamp(wantedDir.dot(owner->updir), -1.0f, 1.0f));
 			// for COB, this sets anglegood to return value of aim script when it finished,
 			// for Lua, there exists a callout to set the anglegood member.
 			// FIXME: convert CSolidObject::heading to radians too.
@@ -785,6 +785,16 @@ void CWeapon::DependentDied(CObject *o)
 	}
 }
 
+bool CWeapon::HaveFreeLineOfFire(const float3& pos, const float3& dir, float length, const CUnit* target) const {
+	CUnit* unit = NULL;
+	CFeature* feature = NULL;
+	const float g = TraceRay::TraceRay(pos, dir, length, collisionFlags, owner, unit, feature);
+
+	// true iff nothing (unit, feature, ground) blocks
+	// the ray of length <length> from <pos> along <dir>
+	return ((g <= 0.0f || g >= (length * 0.9f)) || (unit == target));
+}
+
 bool CWeapon::TryTarget(const float3& pos, bool userTarget, CUnit* unit)
 {
 	if (unit && !(onlyTargetCategory & unit->category)) {
@@ -802,7 +812,7 @@ bool CWeapon::TryTarget(const float3& pos, bool userTarget, CUnit* unit)
 
 	float3 dif = pos - weaponMuzzlePos;
 	float heightDiff = 0.0f; // negative when target below owner
-	const float absTB = streflop::fabsf(targetBorder);
+	const float absTB = math::fabsf(targetBorder);
 
 	if (targetBorder != 0.0f && unit) {
 		float3 difDir(dif);
@@ -810,7 +820,7 @@ bool CWeapon::TryTarget(const float3& pos, bool userTarget, CUnit* unit)
 
 		{
 			CollisionVolume* cvOld = unit->collisionVolume;
-			CollisionVolume  cvNew = CollisionVolume(unit->collisionVolume);
+			CollisionVolume  cvNew(unit->collisionVolume);
 			CollisionQuery   cq;
 
 			cvNew.RescaleAxes(absTB, absTB, absTB);

@@ -1,21 +1,20 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <algorithm>
 #include <locale>
 #include <string>
 #include <vector>
 #include <cctype>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "DamageArrayHandler.h"
 #include "DamageArray.h"
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
 #include "Game/Game.h"
 #include "Lua/LuaParser.h"
-#include "creg/STL_Map.h"
-#include "Util.h"
-#include "Exceptions.h"
+#include "System/creg/STL_Map.h"
+#include "System/Util.h"
+#include "System/Exceptions.h"
 
 
 CR_BIND(CDamageArrayHandler, );
@@ -43,7 +42,7 @@ CDamageArrayHandler::CDamageArrayHandler()
 		typeList.insert(typeList.begin(), "default");
 		name2type["default"] = 0;
 
-		logOutput.Print("Number of damage types: "_STPF_, typeList.size());
+		LOG("Number of damage types: "_STPF_, typeList.size());
 
 		for (int armorID = 1; armorID < (int)typeList.size(); armorID++) {
 			const std::string armorName = StringToLower(typeList[armorID]);
@@ -63,7 +62,7 @@ CDamageArrayHandler::CDamageArrayHandler()
 			}
 		}
 	}
-	catch (content_error) {
+	catch (const content_error& ex) {
 		name2type.clear();
 		name2type["default"] = 0;
 		typeList.clear();

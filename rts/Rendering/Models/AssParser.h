@@ -1,10 +1,12 @@
-#ifndef ASSPARSER_H
-#define ASSPARSER_H
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef ASS_PARSER_H
+#define ASS_PARSER_H
 
 #include <vector>
 #include <map>
 #include "IModelParser.h"
-#include "float3.h"
+#include "System/float3.h"
 
 struct aiNode;
 struct aiScene;
@@ -77,4 +79,4 @@ private:
 	void CalculatePerMeshMinMax(SAssModel* model);
 };
 
-#endif /* ASSPARSER_H */
+#endif /* ASS_PARSER_H */

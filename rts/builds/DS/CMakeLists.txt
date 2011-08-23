@@ -49,13 +49,35 @@ INCLUDE_DIRECTORIES(${ENGINE_SRC_ROOT_DIR}/lib/7zip)
 
 
 ### Assemble sources
+IF	(UNIX)
+	SET(sources_engine_Platform_CrashHandler
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Threading
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Linux/thread_backtrace
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Linux/CrashHandler)
+ELSEIF	(WIN32)
+	SET(sources_engine_Platform_CrashHandler
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Win/seh
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Win/CrashHandler)
+ELSE	()
+	SET(sources_engine_Platform_CrashHandler
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Threading
+		${ENGINE_SRC_ROOT_DIR}/System/Platform/Mac/CrashHandler)
+ENDIF	()
+
 SET(system_files
 	${sources_engine_System_FileSystem}
+	${sources_engine_System_Log}
 	${sources_engine_System_Net}
-	${ENGINE_SRC_ROOT_DIR}/System/Platform/Misc
+	${sources_engine_Platform_CrashHandler}
+	${ENGINE_SRC_ROOT_DIR}/System/Config/ConfigHandler
+	${ENGINE_SRC_ROOT_DIR}/System/Config/ConfigLocater
+	${ENGINE_SRC_ROOT_DIR}/System/Config/ConfigSource
+	${ENGINE_SRC_ROOT_DIR}/System/Config/ConfigVariable
+	${ENGINE_SRC_ROOT_DIR}/System/CRC
 	${ENGINE_SRC_ROOT_DIR}/System/Platform/errorhandler
+	${ENGINE_SRC_ROOT_DIR}/System/Platform/Misc
+	${ENGINE_SRC_ROOT_DIR}/System/Platform/ScopedFileLock
 	${ENGINE_SRC_ROOT_DIR}/System/TdfParser
-	${ENGINE_SRC_ROOT_DIR}/System/ConfigHandler
 	${ENGINE_SRC_ROOT_DIR}/System/GlobalConfig
 	${ENGINE_SRC_ROOT_DIR}/System/Info
 	${ENGINE_SRC_ROOT_DIR}/System/LogOutput
@@ -101,16 +123,22 @@ SET(engineDedicatedSources
 ADD_LIBRARY(springserver-static STATIC EXCLUDE_FROM_ALL ${engineDedicatedSources})
 TARGET_LINK_LIBRARIES(springserver-static ${engineDedicatedLibraries})
 IF    (MINGW)
-	TARGET_LINK_LIBRARIES (springserver-static ws2_32)
+	TARGET_LINK_LIBRARIES (springserver-static ${WS2_32_LIBRARY} ${IMAGEHLP_LIBRARY})
 ENDIF (MINGW)
 
-ADD_LIBRARY(springserver SHARED ${ENGINE_SRC_ROOT_DIR}/Map/MapParser)
+ADD_LIBRARY(springserver SHARED
+		${ENGINE_SRC_ROOT_DIR}/Map/MapParser
+		${ENGINE_SRC_ROOT_DIR}/System/Log/LogOutputSink
+	)
 TARGET_LINK_LIBRARIES(springserver springserver-static)
 
 # Compile dedicated server executable
-ADD_EXECUTABLE(engine-dedicated ${ENGINE_SRC_ROOT_DIR}/Map/MapParser main)
+ADD_EXECUTABLE(engine-dedicated
+		${ENGINE_SRC_ROOT_DIR}/Map/MapParser
+		${ENGINE_SRC_ROOT_DIR}/System/Log/LogOutputSink
+		main
+	)
 TARGET_LINK_LIBRARIES(engine-dedicated springserver-static)
-
 
 ### Install the executable
 INSTALL(TARGETS springserver     DESTINATION ${LIBDIR})

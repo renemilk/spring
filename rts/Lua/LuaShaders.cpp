@@ -1,13 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
-#include <string>
-#include <vector>
-using std::string;
-using std::vector;
-
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaShaders.h"
 
@@ -20,8 +14,13 @@ using std::vector;
 
 #include "Game/Camera.h"
 #include "Rendering/ShadowHandler.h"
-#include "LogOutput.h"
-#include "Util.h"
+#include "System/Log/ILog.h"
+#include "System/Util.h"
+
+#include <string>
+#include <vector>
+using std::string;
+using std::vector;
 
 
 int LuaShaders::activeShaderDepth = 0;
@@ -410,10 +409,10 @@ static bool ParseSources(lua_State* L, int table,
 }
 
 
-static bool ApplyGeometryParameters(lua_State* L, int table, GLuint prog)
+static void ApplyGeometryParameters(lua_State* L, int table, GLuint prog)
 {
-	if (!glProgramParameteriEXT) {
-		return true;
+	if (!IS_GL_FUNCTION_AVAILABLE(glProgramParameteriEXT)) {
+		return;
 	}
 
 	struct { const char* name; GLenum param; } parameters[] = {
@@ -431,8 +430,6 @@ static bool ApplyGeometryParameters(lua_State* L, int table, GLuint prog)
 		}
 		lua_pop(L, 1);
 	}
-
-	return true;
 }
 
 
@@ -580,8 +577,8 @@ int LuaShaders::ActiveShader(lua_State* L)
 	glUseProgram(currentProgram);
 
 	if (error != 0) {
-		logOutput.Print("gl.ActiveShader: error(%i) = %s",
-		                error, lua_tostring(L, -1));
+		LOG_L(L_ERROR, "gl.ActiveShader: error(%i) = %s",
+				error, lua_tostring(L, -1));
 		lua_error(L);
 	}
 
@@ -837,7 +834,7 @@ int LuaShaders::SetShaderParameter(lua_State* L)
 	const GLenum param = (GLenum)luaL_checkint(L, 2);
 	const GLint  value =  (GLint)luaL_checkint(L, 3);
 
-	if (glProgramParameteriEXT) {
+	if (IS_GL_FUNCTION_AVAILABLE(glProgramParameteriEXT)) {
 		glProgramParameteriEXT(progName, param, value);
 	}
 

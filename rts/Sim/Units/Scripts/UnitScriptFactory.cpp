@@ -8,9 +8,9 @@
 
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
-#include "FileSystem/FileSystem.h"
-#include "LogOutput.h"
-#include "Util.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/Log/ILog.h"
+#include "System/Util.h"
 
 
 /******************************************************************************/
@@ -19,7 +19,7 @@
 
 CUnitScript* CUnitScriptFactory::CreateScript(const std::string& name, CUnit* unit)
 {
-	std::string ext = filesystem.GetExtension(name);
+	std::string ext = FileSystem::GetExtension(name);
 	CUnitScript* script = NULL;
 
 	if (ext == "cob") {
@@ -27,7 +27,7 @@ CUnitScript* CUnitScriptFactory::CreateScript(const std::string& name, CUnit* un
 		if (file) {
 			script = new CCobInstance(*file, unit);
 		} else {
-			logOutput.Print("Could not load COB script for unit \"%s\" from: %s", unit->unitDef->name.c_str(), name.c_str());
+			LOG_L(L_WARNING, "Could not load COB script for unit \"%s\" from: %s", unit->unitDef->name.c_str(), name.c_str());
 		}
 	}
 

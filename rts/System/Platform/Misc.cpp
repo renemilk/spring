@@ -32,8 +32,8 @@
 #include <cerrno>
 
 #include "System/Util.h"
-#include "System/LogOutput.h"
-#include "FileSystem/FileSystem.h"
+#include "System/Log/ILog.h"
+#include "System/FileSystem/FileSystem.h"
 
 #if       defined WIN32
 /**
@@ -68,6 +68,26 @@ static HMODULE GetCurrentModule() {
 namespace Platform
 {
 
+#ifndef WIN32
+static std::string GetRealPath(const std::string& path) {
+
+	std::string pathReal = path;
+
+	// using NULL here is not supported in very old systems,
+	// but should be no problem for spring
+	// see for older systems:
+	// http://stackoverflow.com/questions/4109638/what-is-the-safe-alternative-to-realpath
+	char* pathRealC = realpath(path.c_str(), NULL);
+	if (pathRealC != NULL) {
+		pathReal = pathRealC;
+		free(pathRealC);
+		pathRealC = NULL;
+	}
+
+	return pathReal;
+}
+#endif
+
 // Mac OS X:        _NSGetExecutablePath() (man 3 dyld)
 // Linux:           readlink /proc/self/exe
 // Solaris:         getexecname()
@@ -77,8 +97,8 @@ namespace Platform
 std::string GetProcessExecutableFile()
 {
 	std::string procExeFilePath = "";
-	// will only be used if procExeFilePath stays empty
-	const char* error = "Fetch not implemented";
+	// error will only be used if procExeFilePath stays empty
+	const char* error = NULL;
 
 #ifdef linux
 	char file[512];
@@ -108,18 +128,15 @@ std::string GetProcessExecutableFile()
 	uint32_t pathlen = PATH_MAX;
 	char path[PATH_MAX];
 	int err = _NSGetExecutablePath(path, &pathlen);
-	if (err == 0)
-	{
-		char pathReal[PATH_MAX];
-		realpath(path, pathReal);
-		procExeFilePath = std::string(pathReal);
+	if (err == 0) {
+		procExeFilePath = GetRealPath(path);
 	}
 #else
 	#error implement this
 #endif
 
 	if (procExeFilePath.empty()) {
-		logOutput.Print("WARNING: Failed to get file path of the process executable, reason: %s", error);
+		LOG_L(L_WARNING, "Failed to get file path of the process executable, reason: %s", error);
 	}
 
 	return procExeFilePath;
@@ -127,14 +144,14 @@ std::string GetProcessExecutableFile()
 
 std::string GetProcessExecutablePath()
 {
-	return filesystem.GetDirectory(GetProcessExecutableFile());
+	return FileSystem::GetDirectory(GetProcessExecutableFile());
 }
 
 std::string GetModuleFile(std::string moduleName)
 {
 	std::string moduleFilePath = "";
-	// will only be used if moduleFilePath stays empty
-	const char* error = "Fetch not implemented";
+	// this will only be used if moduleFilePath stays empty
+	const char* error = NULL;
 
 #if defined(linux) || defined(__APPLE__)
 #ifdef __APPLE__
@@ -175,6 +192,8 @@ std::string GetModuleFile(std::string moduleName)
 		const int ret = dladdr(moduleAddress, &moduleInfo);
 		if ((ret != 0) && (moduleInfo.dli_fname != NULL)) {
 			moduleFilePath = moduleInfo.dli_fname;
+			// required on APPLE; does not hurt elsewhere
+			moduleFilePath = GetRealPath(moduleFilePath);
 		} else {
 			error = dlerror();
 			if (error == NULL) {
@@ -215,14 +234,14 @@ std::string GetModuleFile(std::string moduleName)
 		if (moduleName.empty()) {
 			moduleName = "<current>";
 		}
-		logOutput.Print("WARNING: Failed to get file path of the module \"%s\", reason: %s", moduleName.c_str(), error);
+		LOG_L(L_WARNING, "Failed to get file path of the module \"%s\", reason: %s", moduleName.c_str(), error);
 	}
 
 	return moduleFilePath;
 }
 std::string GetModulePath(const std::string& moduleName)
 {
-	return filesystem.GetDirectory(GetModuleFile(moduleName));
+	return FileSystem::GetDirectory(GetModuleFile(moduleName));
 }
 
 std::string GetOS()

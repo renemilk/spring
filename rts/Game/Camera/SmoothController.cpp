@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include <SDL_keysym.h>
 #include <SDL_timer.h>
 #include <boost/cstdint.hpp>
@@ -13,11 +12,15 @@
 #include "Game/UI/MouseHandler.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/ConfigHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
 #include "System/myMath.h"
 #include "System/Input/KeyInput.h"
+
+CONFIG(int, SmoothScrollSpeed).defaultValue(10);
+CONFIG(float, SmoothTiltSpeed).defaultValue(1.0f);
+CONFIG(bool, SmoothEnabled).defaultValue(true);
+CONFIG(float, SmoothFOV).defaultValue(45.0f);
 
 SmoothController::SmoothController()
 	: flipped(false)
@@ -28,11 +31,11 @@ SmoothController::SmoothController()
 	, maxHeight(10000)
 	, speedFactor(1)
 {
-	middleClickScrollSpeed = configHandler->Get("MiddleClickScrollSpeed", 0.01f);
-	scrollSpeed = configHandler->Get("SmoothScrollSpeed",10)*0.1f;
-	tiltSpeed = configHandler->Get("SmoothTiltSpeed",1.0f);
-	enabled = !!configHandler->Get("SmoothEnabled",1);
-	fov = configHandler->Get("SmoothFOV", 45.0f);
+	middleClickScrollSpeed = configHandler->GetFloat("MiddleClickScrollSpeed");
+	scrollSpeed = configHandler->GetInt("SmoothScrollSpeed")*0.1f;
+	tiltSpeed = configHandler->GetFloat("SmoothTiltSpeed");
+	enabled = configHandler->GetBool("SmoothEnabled");
+	fov = configHandler->GetFloat("SmoothFOV");
 	lastSource = Noone;
 }
 
@@ -176,11 +179,11 @@ float3 SmoothController::GetPos()
 	pos.z = Clamp(pos.z, 0.01f, gs->mapy * SQUARE_SIZE - 0.01f);
 	height = Clamp(height, 60.0f, maxHeight);
 
-	pos.y = ground->GetHeightAboveWater(pos.x,pos.z);
+	pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false);
 	dir = float3(0.0f, -1.0f, flipped ? zscale : -zscale).ANormalize();
 
 	float3 cpos = pos - dir * height;
-	cpos.y = std::max(cpos.y, ground->GetHeightAboveWater(cpos.x,cpos.z)+5.0f);
+	cpos.y = std::max(cpos.y, ground->GetHeightAboveWater(cpos.x, cpos.z, false) + 5.0f);
 	return cpos;
 }
 
@@ -199,8 +202,9 @@ float3 SmoothController::SwitchFrom() const
 
 void SmoothController::SwitchTo(bool showText)
 {
-	if(showText)
-		logOutput.Print("Switching to Smooth style camera");
+	if (showText) {
+		LOG("Switching to Smooth style camera");
+	}
 }
 
 

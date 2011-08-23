@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ExplosiveProjectile.h"
 #include "Game/Camera.h"
@@ -93,17 +92,6 @@ void CExplosiveProjectile::Update()
 
 void CExplosiveProjectile::Collision()
 {
-	if (!weaponDef->noExplode) {
-		const float h = ground->GetHeightReal(pos.x, pos.z);
-		const float3& n = ground->GetNormal(pos.x, pos.z);
-
-		if (h > pos.y) {
-			pos -= speed * std::max(0.0f, std::min(1.0f, float((h - pos.y) * n.y / n.dot(speed) + 0.1f)));
-		} else if (weaponDef->waterweapon) {
-			return; //let waterweapons go underwater
-		}
-	}
-
 	CWeaponProjectile::Collision();
 }
 

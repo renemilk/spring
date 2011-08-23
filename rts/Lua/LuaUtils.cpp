@@ -1,6 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
+#include "System/Platform/Win/win32.h"
 
 #include <set>
 #include <cctype>
@@ -8,12 +8,12 @@
 #include <boost/cstdint.hpp>
 #include <string.h>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaUtils.h"
 
-#include "LogOutput.h"
-#include "Util.h"
+#include "System/Log/ILog.h"
+#include "System/Util.h"
 #include "LuaConfig.h"
 #include <boost/thread/recursive_mutex.hpp>
 
@@ -473,15 +473,14 @@ void LuaUtils::ParseCommandOptions(lua_State* L, const char* caller,
 }
 
 
-void LuaUtils::ParseCommand(lua_State* L, const char* caller,
-                            int idIndex, Command& cmd)
+Command LuaUtils::ParseCommand(lua_State* L, const char* caller, int idIndex)
 {
 	// cmdID
 	if (!lua_isnumber(L, idIndex)) {
 		luaL_error(L, "%s(): bad command ID", caller);
 	}
 	const int id = lua_toint(L, idIndex);
-	cmd.SetID(id);
+	Command cmd(id);
 
 	// params
 	const int paramTable = (idIndex + 1);
@@ -501,12 +500,13 @@ void LuaUtils::ParseCommand(lua_State* L, const char* caller,
 	// options
 	ParseCommandOptions(L, caller, (idIndex + 2), cmd);
 
-	// NOTE: should do some sanity checking?
+	// XXX should do some sanity checking?
+
+	return cmd;
 }
 
 
-void LuaUtils::ParseCommandTable(lua_State* L, const char* caller,
-                                 int table, Command& cmd)
+Command LuaUtils::ParseCommandTable(lua_State* L, const char* caller, int table)
 {
 	// cmdID
 	lua_rawgeti(L, table, 1);
@@ -514,7 +514,7 @@ void LuaUtils::ParseCommandTable(lua_State* L, const char* caller,
 		luaL_error(L, "%s(): bad command ID", caller);
 	}
 	const int id = lua_toint(L, -1);
-	cmd.SetID(id);
+	Command cmd(id);
 	lua_pop(L, 1);
 
 	// params
@@ -539,7 +539,9 @@ void LuaUtils::ParseCommandTable(lua_State* L, const char* caller,
 	ParseCommandOptions(L, caller, lua_gettop(L), cmd);
 	lua_pop(L, 1);
 
-	// NOTE: should do some sanity checking?
+	// XXX should do some sanity checking?
+
+	return cmd;
 }
 
 
@@ -553,8 +555,7 @@ void LuaUtils::ParseCommandArray(lua_State* L, const char* caller,
 		if (!lua_istable(L, -1)) {
 			continue;
 		}
-		Command cmd;
-		ParseCommandTable(L, caller, lua_gettop(L), cmd);
+		Command cmd = ParseCommandTable(L, caller, lua_gettop(L));
 		commands.push_back(cmd);
 	}
 }
@@ -649,7 +650,7 @@ int LuaUtils::Echo(lua_State* L)
 	lua_getglobal(L, "tostring");
 
 	for (int i = 1; i <= args; i++) {
-		const char *s;
+		const char* s;
 		lua_pushvalue(L, -1);     // function to be called
 		lua_pushvalue(L, i);      // value to print
 		lua_call(L, 1, 1);
@@ -663,7 +664,7 @@ int LuaUtils::Echo(lua_State* L)
 		msg += s;
 		lua_pop(L, 1);            // pop result
 	}
-	logOutput.Print(msg);
+	LOG("%s", msg.c_str());
 
 	if ((args != 1) || !lua_istable(L, 1)) {
 		return 0;
@@ -691,7 +692,7 @@ int LuaUtils::Echo(lua_State* L)
 			lua_pop(L, 1);            // pop result
 		}
 	}
-	logOutput.Print(msg);
+	LOG("%s", msg.c_str());
 
 	return 0;
 }
@@ -849,7 +850,7 @@ void LuaUtils::PushCommandDesc(lua_State* L, const CommandDescription& cd)
 	const int numParams = cd.params.size();
 	const int numTblKeys = 12;
 
-	lua_checkstack(L, 1 + 1 + 1 + 1 + 1);
+	lua_checkstack(L, 1 + 1 + 1 + 1);
 	lua_createtable(L, 0, numTblKeys);
 
 	HSTR_PUSH_NUMBER(L, "id",          cd.id);
@@ -872,9 +873,6 @@ void LuaUtils::PushCommandDesc(lua_State* L, const CommandDescription& cd)
 		lua_pushsstring(L, cd.params[p]);
 		lua_rawseti(L, -2, p + 1);
 	}
-
-	// params["n"] = numParams
-	HSTR_PUSH_NUMBER(L, "n", numParams);
 
 	// CmdDesc["params"] = {[1] = "string1", [2] = "string2", ...}
 	lua_settable(L, -3);

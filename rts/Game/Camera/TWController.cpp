@@ -3,25 +3,28 @@
 #include <boost/cstdint.hpp>
 #include <SDL_keysym.h>
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "TWController.h"
 #include "Game/Camera.h"
 #include "Map/Ground.h"
 #include "Game/UI/MouseHandler.h"
 #include "Rendering/GlobalRendering.h"
-#include "System/ConfigHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Log/ILog.h"
 #include "System/myMath.h"
 #include "System/Input/KeyInput.h"
 
+CONFIG(int, TWScrollSpeed).defaultValue(10);
+CONFIG(bool, TWEnabled).defaultValue(true);
+CONFIG(float, TWFOV).defaultValue(45.0f);
+
+
 CTWController::CTWController()
 {
-	scrollSpeed = configHandler->Get("TWScrollSpeed",10) * 0.1f;
-	enabled = !!configHandler->Get("TWEnabled",1);
-	fov = configHandler->Get("TWFOV", 45.0f);
+	scrollSpeed = configHandler->GetInt("TWScrollSpeed") * 0.1f;
+	enabled = configHandler->GetBool("TWEnabled");
+	fov = configHandler->GetFloat("TWFOV");
 }
 
 
@@ -72,7 +75,7 @@ float3 CTWController::GetPos()
 {
 	pos.x = Clamp(pos.x, 0.01f, gs->mapx*SQUARE_SIZE-0.01f);
 	pos.z = Clamp(pos.z, 0.01f, gs->mapy*SQUARE_SIZE-0.01f);
-	pos.y = ground->GetHeightAboveWater(pos.x,pos.z);
+	pos.y = ground->GetHeightAboveWater(pos.x, pos.z, false);
 
 	camera->rot.x = Clamp(camera->rot.x, -PI*0.4f, -0.1f);
 
@@ -85,8 +88,8 @@ float3 CTWController::GetPos()
 	float dist = -camera->rot.x * 1500;
 
 	float3 cpos = pos - dir * dist;
-	if(cpos.y < ground->GetHeightAboveWater(cpos.x,cpos.z) + 5)
-		cpos.y = ground->GetHeightAboveWater(cpos.x,cpos.z) + 5;
+	if (cpos.y < ground->GetHeightAboveWater(cpos.x, cpos.z, false) + 5)
+		cpos.y = ground->GetHeightAboveWater(cpos.x, cpos.z, false) + 5;
 
 	return cpos;
 }
@@ -112,7 +115,7 @@ float3 CTWController::SwitchFrom() const
 void CTWController::SwitchTo(bool showText)
 {
 	if (showText) {
-		logOutput.Print("Switching to Total War style camera");
+		LOG("Switching to Total War style camera");
 	}
 }
 

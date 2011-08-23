@@ -3,10 +3,11 @@
 #ifndef _OPTION_CPP
 #define _OPTION_CPP
 
-#include "Option.h"
+#include "System/Option.h"
 
 #include "System/Util.h"
 #include "System/Exceptions.h"
+#include "System/Log/ILog.h"
 #include "System/FileSystem/FileSystem.h"
 #include "System/FileSystem/ArchiveScanner.h"
 #include "Lua/LuaParser.h"
@@ -46,7 +47,7 @@ std::string option_getDefString(const Option& option) {
 	return def;
 }
 
-static void parseOption(const LuaTable& root, int index, Option& opt,
+static void option_parseOption(const LuaTable& root, int index, Option& opt,
 		std::set<string>& optionsSet) {
 
 	const LuaTable& optTbl = root.SubTable(index);
@@ -156,20 +157,12 @@ static void parseOption(const LuaTable& root, int index, Option& opt,
 }
 
 
-void parseOptions(
+static void option_parseOptionsInternal(
 		std::vector<Option>& options,
-		const std::string& fileName,
-		const std::string& fileModes,
-		const std::string& accessModes,
-		std::set<std::string>* optionsSet,
-		CLogSubsystem* logSubsystem) {
-
-	if (!logSubsystem) {
-		assert(logSubsystem);
-	}
-
-	LuaParser luaParser(fileName, fileModes, accessModes);
-
+		LuaParser& luaParser,
+		const std::string& luaSourceDesc,
+		std::set<std::string>* optionsSet)
+{
 	if (!luaParser.Execute()) {
 		throw content_error("luaParser.Execute() failed: "
 				+ luaParser.GetErrorLog());
@@ -189,12 +182,11 @@ void parseOptions(
 	for (int index = 1; root.KeyExists(index); index++) {
 		Option opt;
 		try {
-			parseOption(root, index, opt, *myOptionsSet);
+			option_parseOption(root, index, opt, *myOptionsSet);
 			options.push_back(opt);
-		} catch (content_error& err) {
-			logOutput.Print(*logSubsystem,
-					"Failed parsing option %d from %s: %s",
-					index, fileName.c_str(), err.what());
+		} catch (const content_error& err) {
+			LOG_L(L_WARNING, "Failed parsing option %d from %s: %s",
+					index, luaSourceDesc.c_str(), err.what());
 		}
 	}
 	if (optionsSet == NULL) {
@@ -203,20 +195,36 @@ void parseOptions(
 	}
 }
 
+void option_parseOptions(
+		std::vector<Option>& options,
+		const std::string& fileName,
+		const std::string& fileModes,
+		const std::string& accessModes,
+		std::set<std::string>* optionsSet)
+{
+	LuaParser luaParser(fileName, fileModes, accessModes);
+	option_parseOptionsInternal(options, luaParser, fileName, optionsSet);
+}
 
-void parseMapOptions(
+void option_parseOptionsLuaString(
+		std::vector<Option>& options,
+		const std::string& optionsLuaString,
+		const std::string& accessModes,
+		std::set<std::string>* optionsSet)
+{
+	LuaParser luaParser(optionsLuaString, accessModes);
+	option_parseOptionsInternal(options, luaParser, "<Lua-Text-Chunk>", optionsSet);
+}
+
+
+void option_parseMapOptions(
 		std::vector<Option>& options,
 		const std::string& fileName,
 		const std::string& mapName,
 		const std::string& fileModes,
 		const std::string& accessModes,
-		std::set<std::string>* optionsSet,
-		CLogSubsystem* logSubsystem) {
-
-	if (!logSubsystem) {
-		assert(logSubsystem);
-	}
-
+		std::set<std::string>* optionsSet)
+{
 	LuaParser luaParser(fileName, fileModes, accessModes);
 
 	const string mapFile    = archiveScanner->MapNameToMapFile(mapName);
@@ -230,7 +238,7 @@ void parseMapOptions(
 
 	luaParser.GetTable("Map");
 	luaParser.AddString("name",     mapName);	
-	luaParser.AddString("fileName", filesystem.GetFilename(mapFile));
+	luaParser.AddString("fileName", FileSystem::GetFilename(mapFile));
 	luaParser.AddString("fullName", mapFile);
 	luaParser.AddString("configFile", configName);
 	luaParser.EndTable();
@@ -254,10 +262,10 @@ void parseMapOptions(
 	for (int index = 1; root.KeyExists(index); index++) {
 		Option opt;
 		try {
-			parseOption(root, index, opt, *myOptionsSet);
+			option_parseOption(root, index, opt, *myOptionsSet);
 			options.push_back(opt);
-		} catch (content_error& err) {
-			logOutput.Print(*logSubsystem,
+		} catch (const content_error& err) {
+			LOG_L(L_WARNING,
 					"Failed parsing map-option %d from %s for map %s: %s",
 					index, fileName.c_str(), mapName.c_str(), err.what());
 		}

@@ -12,17 +12,22 @@
 #include <cstdlib>
 #include <cstdio>
 #include <inttypes.h> // for uintptr_t
+#include <boost/bind.hpp>
 #include <boost/static_assert.hpp> // for BOOST_STATIC_ASSERT
+#include <boost/thread.hpp>
 #include <SDL_events.h>
 
 #include "thread_backtrace.h"
-#include "FileSystem/FileSystemHandler.h"
+#include "System/FileSystem/FileSystem.h"
 #include "Game/GameVersion.h"
+#include "System/Log/ILog.h"
+#include "System/Log/LogSinkHandler.h"
 #include "System/LogOutput.h"
 #include "System/maindefines.h" // for SNPRINTF
 #include "System/myTime.h"
 #include "System/Platform/Misc.h"
 #include "System/Platform/errorhandler.h"
+#include "System/Platform/Threading.h"
 
 
 static const int MAX_STACKTRACE_DEPTH = 10;
@@ -101,18 +106,18 @@ static std::string LocateSymbolFile(const std::string& binaryFile)
 
 	if (bin_ext.length() > 0) {
 		symbolFile = bin_path + '/' + bin_file + bin_ext + ".dbg";
-		if (FileSystemHandler::IsReadableFile(symbolFile)) {
+		if (FileSystem::IsReadableFile(symbolFile)) {
 			return symbolFile;
 		}
 	}
 
 	symbolFile = bin_path + '/' + bin_file + ".dbg";
-	if (FileSystemHandler::IsReadableFile(symbolFile)) {
+	if (FileSystem::IsReadableFile(symbolFile)) {
 		return symbolFile;
 	}
 
 	symbolFile = debugPath + bin_path + '/' + bin_file + bin_ext;
-	if (FileSystemHandler::IsReadableFile(symbolFile)) {
+	if (FileSystem::IsReadableFile(symbolFile)) {
 		return symbolFile;
 	}
 
@@ -253,7 +258,7 @@ static void TranslateStackTrace(std::vector<std::string>* lines, const std::vect
 		}
 	}
 	if (!addr2line_found) {
-		logOutput.Print(" addr2line not found!");
+		LOG_L(L_WARNING, " addr2line not found!");
 		logOutput.Flush();
 		return;
 	}
@@ -301,15 +306,21 @@ static void TranslateStackTrace(std::vector<std::string>* lines, const std::vect
 }
 
 
+void ForcedExitAfterFiveSecs() {
+	boost::this_thread::sleep(boost::posix_time::seconds(5));
+	exit(-1);
+}
+
+
 
 namespace CrashHandler
 {
 	static void Stacktrace(bool* keepRunning, pthread_t* hThread = NULL, const char* threadName = NULL)
 	{
 		if (threadName) {
-			logOutput.Print("Stacktrace (%s):", threadName);
+			LOG_L(L_ERROR, "Stacktrace (%s):", threadName);
 		} else {
-			logOutput.Print("Stacktrace:");
+			LOG_L(L_ERROR, "Stacktrace:");
 		}
 
 		bool _keepRunning = false;
@@ -329,7 +340,7 @@ namespace CrashHandler
 			std::vector<void*> buffer(MAX_STACKTRACE_DEPTH + 2);
 			int numLines;
 			if (hThread) {
-				logOutput.Print("  (Note: This stacktrace is not 100%% accurate! It just gives an impression.)");
+				LOG_L(L_ERROR, "  (Note: This stacktrace is not 100%% accurate! It just gives an impression.)");
 				logOutput.Flush();
 				numLines = thread_backtrace(*hThread, &buffer[0], buffer.size());    //! stack pointers
 			} else {
@@ -349,7 +360,7 @@ namespace CrashHandler
 		}
 
 		if (stacktrace.empty()) {
-			logOutput.Print("  Unable to create stacktrace");
+			LOG_L(L_ERROR, "  Unable to create stacktrace");
 			return;
 		}
 
@@ -380,7 +391,7 @@ namespace CrashHandler
 
 			//! Linux Graphic drivers are known to fail with moderate OpenGL usage
 			if (containsOglSo) {
-				logOutput.Print("This stack trace indicates a problem with your graphic card driver. "
+				LOG_L(L_ERROR, "This stack trace indicates a problem with your graphic card driver. "
 						"Please try upgrading or downgrading it. "
 						"Specifically recommended is the latest driver, and one that is as old as your graphic card. "
 						"Also try lower graphic details and disabling Lua widgets in spring-settings.\n");
@@ -392,11 +403,11 @@ namespace CrashHandler
 				containedAIInterfaceSo = false;
 			}
 			if (containedAIInterfaceSo) {
-				logOutput.Print("This stack trace indicates a problem with an AI Interface library.");
+				LOG_L(L_ERROR, "This stack trace indicates a problem with an AI Interface library.");
 				*keepRunning = true;
 			}
 			if (containedSkirmishAISo) {
-				logOutput.Print("This stack trace indicates a problem with a Skirmish AI library.");
+				LOG_L(L_ERROR, "This stack trace indicates a problem with a Skirmish AI library.");
 				*keepRunning = true;
 			}
 
@@ -409,7 +420,7 @@ namespace CrashHandler
 		//! Print out the StackTrace
 		unsigned numLine = 0;
 		for (std::vector<std::string>::iterator it = stacktrace.begin(); it != stacktrace.end(); ++it) {
-			logOutput.Print("  <%u> %s", numLine++, it->c_str());
+			LOG_L(L_ERROR, "  <%u> %s", numLine++, it->c_str());
 		}
 		logOutput.Flush();
 	}
@@ -418,8 +429,8 @@ namespace CrashHandler
 	void Stacktrace(Threading::NativeThreadHandle thread, const std::string& threadName)
 	{
 		if (!Threading::IsMainThread(thread)) {
-			logOutput.Print("Stacktrace (%s):", threadName.c_str());
-			logOutput.Print("  No Stacktraces for non-MainThread.");
+			LOG_L(L_ERROR, "Stacktrace (%s):", threadName.c_str());
+			LOG_L(L_ERROR, "  No Stacktraces for non-MainThread.");
 			return;
 		}
 		Stacktrace(NULL, &thread, threadName.c_str());
@@ -431,23 +442,20 @@ namespace CrashHandler
 	void HandleSignal(int signal)
 	{
 		if (signal == SIGINT) {
-			static bool inExit = false;
-			static spring_time exitTime = spring_notime;
-			if (inExit) {
-				//! give Spring 3 seconds to cleanly exit
-				if (spring_gettime() > exitTime + spring_secs(3)) {
-					exit(-1);
-				}
-			} else {
-				inExit = true;
-				exitTime = spring_gettime();
-				SDL_Event event;
-				event.type = SDL_QUIT;
-				SDL_PushEvent(&event);
-			}
+			//! ctrl+c = kill
+			LOG("caught SIGINT, aborting");
+
+			//! first try a clean exit
+			SDL_Event event;
+			event.type = SDL_QUIT;
+			SDL_PushEvent(&event);
+
+			//! abort after 5sec
+			boost::thread(boost::bind(&ForcedExitAfterFiveSecs));
 			return;
 		}
-		logOutput.SetSubscribersEnabled(false);
+
+		logSinkHandler.SetSinking(false);
 
 		std::string error;
 		if (signal == SIGSEGV) {
@@ -460,17 +468,19 @@ namespace CrashHandler
 			error = "IO-Error (SIGIO)";
 		} else if (signal == SIGABRT) {
 			error = "Aborted (SIGABRT)";
+		} else if (signal == SIGFPE) {
+			error = "FloatingPointException (SIGFPE)";
 		} else {
 			//! we should never get here
 			error = "Unknown signal";
 		}
-		logOutput.Print("%s in spring %s\n", error.c_str(), SpringVersion::GetFull().c_str());
+		LOG_L(L_ERROR, "%s in spring %s\n", error.c_str(), SpringVersion::GetFull().c_str());
 
 		//! print stacktrace
 		bool keepRunning = false;
 		Stacktrace(&keepRunning);
 
-		//! only try to keep on running for these signals
+		//! don't try to keep on running after these signals
 		if (keepRunning &&
 		    (signal != SIGSEGV) &&
 		    (signal != SIGILL) &&
@@ -485,18 +495,18 @@ namespace CrashHandler
 			{
 				//! try to cleanup
 				/*if (!containedAIInterfaceSo.empty()) {
-					//logOutput.Print("Trying to kill AI Interface library only ...\n");
+					//LOG_L(L_ERROR, "Trying to kill AI Interface library only ...\n");
 					// TODO
 					//cleanupOk = true;
 				} else if (!containedSkirmishAISo.empty()) {
-					//logOutput.Print("Trying to kill Skirmish AI library only ...\n");
+					//LOG_L(L_ERROR, "Trying to kill Skirmish AI library only ...\n");
 					// TODO
 					//cleanupOk = true;
 				}*/
 			}
 
 			if (cleanupOk) {
-				logOutput.SetSubscribersEnabled(true);
+				logSinkHandler.SetSinking(true);
 			} else {
 				keepRunning = false;
 			}
@@ -504,6 +514,9 @@ namespace CrashHandler
 
 		//! exit app if we catched a critical one
 		if (!keepRunning) {
+			//! don't handle any further signals when exiting
+			Remove();
+			
 			std::ostringstream buf;
 			buf << "Spring has crashed:\n"
 				<< error << ".\n\n"
@@ -518,6 +531,7 @@ namespace CrashHandler
 		signal(SIGILL,  HandleSignal); //! illegal instruction
 		signal(SIGPIPE, HandleSignal); //! maybe some network error
 		signal(SIGIO,   HandleSignal); //! who knows?
+		signal(SIGFPE,  HandleSignal); //! div0 and more
 		signal(SIGABRT, HandleSignal);
 		signal(SIGINT,  HandleSignal);
 	}
@@ -527,11 +541,13 @@ namespace CrashHandler
 		signal(SIGILL,  SIG_DFL);
 		signal(SIGPIPE, SIG_DFL);
 		signal(SIGIO,   SIG_DFL);
+		signal(SIGFPE,  SIG_DFL);
 		signal(SIGABRT, SIG_DFL);
 		signal(SIGINT,  SIG_DFL);
 	}
 
 	void OutputStacktrace() {
-		// FIXME: This is supposed to output a stacktrace of the current thread
+		bool keepRunning = true;
+		Stacktrace(&keepRunning);
 	}
 };

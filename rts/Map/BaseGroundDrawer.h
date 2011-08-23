@@ -7,10 +7,11 @@
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/LightHandler.h"
 #include "Rendering/GL/PBO.h"
-#include "float3.h"
+#include "System/float3.h"
 
 class CMetalMap;
 class CHeightLinePalette;
+class CBaseGroundTextures;
 
 class CBaseGroundDrawer
 {
@@ -64,6 +65,8 @@ public:
 	bool UpdateExtraTexture();
 	bool DrawExtraTex() const { return drawMode != drawNormal; }
 
+	CBaseGroundTextures* GetGroundTextures() { return groundTextures; }
+
 	bool wireframe;
 	bool advShading;
 
@@ -104,6 +107,7 @@ public:
 #endif
 
 	CHeightLinePalette* heightLinePal;
+	CBaseGroundTextures* groundTextures;
 };
 
 #endif // __BASE_GROUND_DRAWER__

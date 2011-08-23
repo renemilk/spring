@@ -1,27 +1,27 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
+#include "System/mmgr.h"
+
+#include "S3OTextureHandler.h"
+
+#include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/SimpleParser.h"
+#include "Rendering/ShadowHandler.h"
+#include "Rendering/UnitDrawer.h"
+#include "Rendering/Models/3DModel.h"
+#include "Rendering/Textures/Bitmap.h"
+#include "System/Util.h"
+#include "System/Exceptions.h"
+#include "System/Log/ILog.h"
+#include "System/Platform/Threading.h"
 
 #include <algorithm>
 #include <cctype>
 #include <set>
 #include <sstream>
-#include "mmgr.h"
 
-#include "S3OTextureHandler.h"
-#include "FileSystem/FileHandler.h"
-#include "FileSystem/SimpleParser.h"
-#include "Rendering/ShadowHandler.h"
-#include "Rendering/UnitDrawer.h"
-#include "Rendering/Models/3DModel.h"
-#include "Rendering/Textures/Bitmap.h"
-#include "TAPalette.h"
-#include "System/Util.h"
-#include "System/Exceptions.h"
-#include "System/LogOutput.h"
-#include "System/Platform/Threading.h"
-
-static CLogSubsystem LOG_TEXTURE("Texture");
+#define LOG_SECTION_TEXTURE "Texture"
+LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_TEXTURE)
 
 // The S3O texture handler uses two textures.
 // The first contains diffuse color (RGB) and teamcolor (A)
@@ -35,21 +35,24 @@ CS3OTextureHandler* texturehandlerS3O = NULL;
 
 CS3OTextureHandler::CS3OTextureHandler()
 {
-	s3oTextures.push_back(S3oTex());
-	s3oTextures.push_back(S3oTex());
+	s3oTextures.push_back(new S3oTex());
+	s3oTextures.push_back(new S3oTex());
+#if defined(USE_GML) && GML_ENABLE_SIM && GML_SHARE_LISTS
+	DoUpdateDraw();
+#endif
 }
 
 CS3OTextureHandler::~CS3OTextureHandler()
 {
-	while (s3oTextures.size() > 1){
-		glDeleteTextures (1, &s3oTextures.back().tex1);
-		glDeleteTextures (1, &s3oTextures.back().tex2);
-		s3oTextures.pop_back();
+	for (int i = 0; i < s3oTextures.size(); ++i){
+		glDeleteTextures (1, &s3oTextures[i]->tex1);
+		glDeleteTextures (1, &s3oTextures[i]->tex2);
+		delete s3oTextures[i];
 	}
 }
 
 void CS3OTextureHandler::LoadS3OTexture(S3DModel* model) {
-#if defined(USE_GML) && GML_ENABLE_SIM // even though glShareLists is now in place, this delayed loading is good because eliminates the need for locking
+#if defined(USE_GML) && GML_ENABLE_SIM && !GML_SHARE_LISTS
 	model->textureType = Threading::IsSimThread() ? -1 : LoadS3OTextureNow(model);
 #else
 	model->textureType = LoadS3OTextureNow(model);
@@ -62,23 +65,28 @@ void CS3OTextureHandler::Update() {
 int CS3OTextureHandler::LoadS3OTextureNow(const S3DModel* model)
 {
 	GML_RECMUTEX_LOCK(model); // LoadS3OTextureNow
-	logOutput.Print(LOG_TEXTURE, "Load S3O texture now (Flip Y Axis: %s, Invert Team Alpha: %s)", 
-		model->flipTexY ? "yes" : "no",
-		model->invertTexAlpha ? "yes" : "no"
-	);
+	LOG_S(LOG_SECTION_TEXTURE,
+			"Load S3O texture now (Flip Y Axis: %s, Invert Team Alpha: %s)", 
+			model->flipTexY ? "yes" : "no",
+			model->invertTexAlpha ? "yes" : "no");
 
 	const string totalName = model->tex1 + model->tex2;
 
 	if (s3oTextureNames.find(totalName) != s3oTextureNames.end()) {
+#if defined(USE_GML) && GML_ENABLE_SIM && GML_SHARE_LISTS
+		if (!Threading::IsSimThread())
+			DoUpdateDraw();
+#endif
 		return s3oTextureNames[totalName];
 	}
 
 	CBitmap tex1bm;
 	CBitmap tex2bm;
-	S3oTex tex;
+	S3oTex* tex = new S3oTex();
 
 	if (!tex1bm.Load(std::string("unittextures/" + model->tex1))) {
-		logOutput.Print("[%s] could not load texture \"%s\" from model \"%s\"", __FUNCTION__, model->tex1.c_str(), model->name.c_str());
+		LOG_L(L_WARNING, "[%s] could not load texture \"%s\" from model \"%s\"",
+				__FUNCTION__, model->tex1.c_str(), model->name.c_str());
 
 		// file not found (or headless build), set single pixel to red so unit is visible
 		tex1bm.channels = 4;
@@ -91,10 +99,10 @@ int CS3OTextureHandler::LoadS3OTextureNow(const S3DModel* model)
 	if (model->flipTexY) tex1bm.ReverseYAxis();
 	if (model->invertTexAlpha) tex1bm.InvertAlpha();
 
-	tex.num       = s3oTextures.size();
-	tex.tex1      = tex1bm.CreateTexture(true);
-	tex.tex1SizeX = tex1bm.xsize;
-	tex.tex1SizeY = tex1bm.ysize;
+	tex->num       = s3oTextures.size();
+	tex->tex1      = tex1bm.CreateTexture(true);
+	tex->tex1SizeX = tex1bm.xsize;
+	tex->tex1SizeY = tex1bm.ysize;
 
 	// No error checking here... other code relies on an empty texture
 	// being generated if it couldn't be loaded.
@@ -110,24 +118,51 @@ int CS3OTextureHandler::LoadS3OTextureNow(const S3DModel* model)
 	}
 	if (model->flipTexY) tex2bm.ReverseYAxis();
 
-	tex.tex2      = tex2bm.CreateTexture(true);
-	tex.tex2SizeX = tex2bm.xsize;
-	tex.tex2SizeY = tex2bm.ysize;
+	tex->tex2      = tex2bm.CreateTexture(true);
+	tex->tex2SizeX = tex2bm.xsize;
+	tex->tex2SizeY = tex2bm.ysize;
 
 	s3oTextures.push_back(tex);
-	s3oTextureNames[totalName] = tex.num;
+	s3oTextureNames[totalName] = tex->num;
 
-	return tex.num;
+#if defined(USE_GML) && GML_ENABLE_SIM && GML_SHARE_LISTS
+	if (!Threading::IsSimThread())
+		DoUpdateDraw();
+#endif
+
+	return tex->num;
 }
+
+
+inline void DoSetS3oTexture(int num, std::vector<CS3OTextureHandler::S3oTex *>& s3oTex) {
+	if (shadowHandler->inShadowPass) {
+		glBindTexture(GL_TEXTURE_2D, s3oTex[num]->tex2);
+	} else {
+		glActiveTextureARB(GL_TEXTURE0_ARB);
+		glBindTexture(GL_TEXTURE_2D, s3oTex[num]->tex1);
+		glActiveTextureARB(GL_TEXTURE1_ARB);
+		glBindTexture(GL_TEXTURE_2D, s3oTex[num]->tex2);
+	}
+}
+
 
 void CS3OTextureHandler::SetS3oTexture(int num)
 {
-	if (shadowHandler->inShadowPass) {
-		glBindTexture(GL_TEXTURE_2D, s3oTextures[num].tex2);
-	} else {
-		glActiveTextureARB(GL_TEXTURE0_ARB);
-		glBindTexture(GL_TEXTURE_2D, s3oTextures[num].tex1);
-		glActiveTextureARB(GL_TEXTURE1_ARB);
-		glBindTexture(GL_TEXTURE_2D, s3oTextures[num].tex2);
+#if defined(USE_GML) && GML_ENABLE_SIM && GML_SHARE_LISTS 
+	if (!Threading::IsSimThread()) {
+		DoSetS3oTexture(num, s3oTexturesDraw);
+		return;
 	}
+	// it seems this is only accessed by draw thread, but just in case..
+	GML_RECMUTEX_LOCK(model); // SetS3oTexture
+#endif
+	DoSetS3oTexture(num, s3oTextures);
+}
+
+void CS3OTextureHandler::UpdateDraw() {
+#if defined(USE_GML) && GML_ENABLE_SIM && GML_SHARE_LISTS
+	GML_RECMUTEX_LOCK(model); // UpdateDraw
+
+	DoUpdateDraw();
+#endif
 }

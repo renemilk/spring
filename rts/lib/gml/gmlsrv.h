@@ -12,7 +12,6 @@
 
 #ifdef USE_GML
 
-#include "StdAfx.h"
 #include <boost/thread/thread.hpp>
 #include <boost/thread/barrier.hpp>
 #include <boost/bind.hpp>
@@ -20,7 +19,7 @@
 #include "System/Platform/Watchdog.h"
 #include "lib/streflop/streflop_cond.h"
 #if !defined(_MSC_VER) && defined(_WIN32)
-#	include <windows.h>
+#	include "System/Platform/Win/win32.h"
 #endif
 
 EXTERN inline void gmlUpdateServers() {
@@ -440,7 +439,7 @@ public:
 	}
 
 	void gmlClientAux() {
-		Watchdog::RegisterThread("sim", true);
+		Watchdog::RegisterThread(WDT_SIM, true);
 		set_threadnum(GML_SIM_THREAD_NUM);
 		streflop_init<streflop::Simple>();
 		while(dorun) {

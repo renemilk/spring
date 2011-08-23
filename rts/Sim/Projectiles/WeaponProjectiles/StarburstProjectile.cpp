@@ -1,14 +1,13 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "StarburstProjectile.h"
 #include "Game/Camera.h"
 #include "Game/GameHelper.h"
 #include "Map/Ground.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/ProjectileDrawer.hpp"
+#include "Rendering/ProjectileDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/TextureAtlas.h"
@@ -17,7 +16,6 @@
 #include "Sim/Units/Unit.h"
 #include "Sim/Weapons/WeaponDef.h"
 #include "System/Sync/SyncTracer.h"
-#include "System/GlobalUnsynced.h"
 #include "System/Matrix44f.h"
 #include "System/myMath.h"
 
@@ -49,8 +47,6 @@ CR_REG_METADATA(CStarburstProjectile,(
 
 void CStarburstProjectile::creg_Serialize(creg::ISerializer& s)
 {
-	s.Serialize(numCallback, sizeof(int));
-
 	// NOTE This could be tricky if gs is serialized after losHandler.
 	for (int a = 0; a < NUM_TRACER_PARTS; ++a) {
 		s.Serialize(tracerParts[a], sizeof(struct CStarburstProjectile::TracerPart));
@@ -66,7 +62,7 @@ CStarburstProjectile::CStarburstProjectile(
 	CUnit* target,
 	const WeaponDef* weaponDef,
 	CWeaponProjectile* interceptTarget,
-	float maxdistance, float3 aimError):
+	float maxRange, float3 aimError):
 
 	CWeaponProjectile(pos, speed, owner, target, targetPos, weaponDef, interceptTarget, 200),
 	tracking(tracking),
@@ -80,9 +76,8 @@ CStarburstProjectile::CStarburstProjectile(
 	numParts(0),
 	doturn(true),
 	curCallback(NULL),
-	numCallback(NULL),
 	missileAge(0),
-	distanceToTravel(maxdistance)
+	distanceToTravel(maxRange)
 {
 	projectileType = WEAPON_STARBURST_PROJECTILE;
 	this->uptime = uptime;
@@ -99,9 +94,6 @@ CStarburstProjectile::CStarburstProjectile(
 	curSpeed = speed.Length();
 	dir = speed / curSpeed;
 	oldSmokeDir = dir;
-
-	numCallback = new int;
-	*numCallback = 0;
 
 	const float3 camDir = (pos - camera->pos).ANormalize();
 	const float camDist = (camera->pos.distance(pos) * 0.2f) + ((1.0f - fabs(camDir.dot(dir))) * 3000);
@@ -129,9 +121,15 @@ CStarburstProjectile::CStarburstProjectile(
 	cegID = gCEG->Load(explGenHandler, cegTag);
 }
 
+void CStarburstProjectile::Detach()
+{
+	// SYNCED
+	CWeaponProjectile::Detach();
+}
+
 CStarburstProjectile::~CStarburstProjectile()
 {
-	delete numCallback;
+	// UNSYNCED
 	if (curCallback) {
 		curCallback->drawCallbacker = 0;
 	}
@@ -144,16 +142,6 @@ CStarburstProjectile::~CStarburstProjectile()
 
 void CStarburstProjectile::Collision()
 {
-	const float h = ground->GetHeightReal(pos.x, pos.z);
-
-	if (weaponDef->waterweapon && h < pos.y) {
-		// prevent impact on water if waterweapon is set
-		return;
-	}
-	if (h > pos.y) {
-		pos += (speed * (h - pos.y) / speed.y);
-	}
-
 	if (weaponDef->visuals.smokeTrail) {
 		new CSmokeTrailProjectile(pos, oldSmoke, dir, oldSmokeDir, owner(), false, true, 7, SMOKE_TIME, 0.7f, drawTrail, 0, weaponDef->visuals.texture2);
 	}
@@ -200,7 +188,7 @@ void CStarburstProjectile::Update()
 
 			speed = dir * curSpeed;
 		}
-	} else if (doturn && ttl > 0 && distanceToTravel > 0) {
+	} else if (doturn && ttl > 0 && distanceToTravel > 0.0f) {
 		if (!luaMoveCtrl) {
 			float3 dif(targetPos - pos);
 			dif.Normalize();
@@ -224,11 +212,11 @@ void CStarburstProjectile::Update()
 				dir.Normalize();
 			}
 			speed = dir * curSpeed;
-			if (distanceToTravel != MAX_WORLD_SIZE) {
+			if (distanceToTravel != MAX_PROJECTILE_RANGE) {
 				distanceToTravel -= speed.Length2D();
 			}
 		}
-	} else if (ttl > 0 && distanceToTravel > 0) {
+	} else if (ttl > 0 && distanceToTravel > 0.0f) {
 		if (!luaMoveCtrl) {
 			if (curSpeed < maxSpeed) {
 				curSpeed += weaponDef->weaponacceleration;
@@ -248,7 +236,7 @@ void CStarburstProjectile::Update()
 
 			speed = dir * curSpeed;
 
-			if (distanceToTravel != MAX_WORLD_SIZE) {
+			if (distanceToTravel != MAX_PROJECTILE_RANGE) {
 				distanceToTravel -= speed.Length2D();
 			}
 		}
@@ -407,19 +395,12 @@ void CStarburstProjectile::Draw()
 			}
 		}
 	}
+
 	DrawCallback();
-	if (curCallback == NULL)
-		DrawCallback();
 }
 
 void CStarburstProjectile::DrawCallback()
 {
-	if (*numCallback != globalRendering->drawFrame) {
-		*numCallback = globalRendering->drawFrame;
-		return;
-	}
-
-	*numCallback = 0;
 	inArray = true;
 
 	unsigned char col[4];

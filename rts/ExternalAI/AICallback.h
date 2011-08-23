@@ -4,7 +4,7 @@
 #define AI_CALLBACK_H
 
 #include "ExternalAI/AILegacySupport.h"
-#include "float3.h"
+#include "System/float3.h"
 
 #include <string>
 #include <vector>
@@ -230,8 +230,8 @@ public:
 
 	int GetSelectedUnits(int* unitIds, int unitIds_max = -1);
 	float3 GetMousePos();
-	int GetMapPoints(PointMarker* pm, int pm_sizeMax, bool includeAllies);
-	int GetMapLines(LineMarker* lm, int lm_sizeMax, bool includeAllies);
+	void GetMapPoints(std::vector<PointMarker>& pm, int pm_sizeMax, bool includeAllies);
+	void GetMapLines(std::vector<LineMarker>& lm, int lm_sizeMax, bool includeAllies);
 
 	float GetUnitDefRadius(int unitDefId);
 	float GetUnitDefHeight(int unitDefId);

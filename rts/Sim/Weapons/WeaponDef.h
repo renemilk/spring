@@ -55,7 +55,6 @@ public:
 		, flighttime(0)
 		, metalcost(0.0f)
 		, energycost(0.0f)
-		, supplycost(0.0f)
 		, projectilespershot(0)
 		, id(0)
 		, tdfId(0)
@@ -92,7 +91,6 @@ public:
 		, startvelocity(0.0f)
 		, weaponacceleration(0.0f)
 		, turnrate(0.0f)
-		, maxvelocity(0.0f)
 		, projectilespeed(0.0f)
 		, explosionSpeed(0.0f)
 		, onlyTargetCategory(0)
@@ -144,6 +142,7 @@ public:
 	~WeaponDef();
 
 	S3DModel* LoadModel();
+	S3DModel* LoadModel() const;
 
 	std::string name;
 	std::string type;
@@ -193,7 +192,6 @@ public:
 
 	float metalcost;
 	float energycost;
-	float supplycost;
 
 	int projectilespershot;
 
@@ -211,7 +209,7 @@ public:
 	bool impactOnly;            ///< The weapon damages by impacting, not by exploding
 
 	bool noAutoTarget;          ///< cant target stuff (for antinuke,dgun)
-	bool manualfire;            ///< use dgun button
+	bool manualfire;            ///< if true, slave us to the ManualFire button
 	int interceptor;            ///< anti nuke
 	int targetable;             ///< nuke (can be shot by interceptor)
 	bool stockpile;
@@ -238,7 +236,6 @@ public:
 	float startvelocity;
 	float weaponacceleration;
 	float turnrate;
-	float maxvelocity;
 
 	float projectilespeed;
 	float explosionSpeed;

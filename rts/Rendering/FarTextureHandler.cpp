@@ -1,26 +1,35 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include "FarTextureHandler.h"
 
 #include "Game/Camera.h"
 #include "Rendering/UnitDrawer.h"
 #include "Rendering/GlobalRendering.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/Textures/S3OTextureHandler.h"
 #include "Rendering/Models/3DModel.h"
 #include "Rendering/Models/WorldObjectModelRenderer.h"
 #include "Sim/Objects/SolidObject.h"
-#include "System/GlobalUnsynced.h"
 #include "System/myMath.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/bitops.h"
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include "string.h"
+
+
+#define LOG_SECTION_FAR_TEXTURE_HANDLER "FarTextureHandler"
+LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_FAR_TEXTURE_HANDLER)
+
+// use the specific section for all LOG*() calls in this source file
+#ifdef LOG_SECTION_CURRENT
+	#undef LOG_SECTION_CURRENT
+#endif
+#define LOG_SECTION_CURRENT LOG_SECTION_FAR_TEXTURE_HANDLER
+
 
 CFarTextureHandler* farTextureHandler = NULL;
 
@@ -30,25 +39,24 @@ const int CFarTextureHandler::numOrientations = 8;
 
 CFarTextureHandler::CFarTextureHandler()
 {
+	farTextureID = 0;
 	usedFarTextures = 0;
-
-	farTexture = 0;
 
 	// ATI supports 16K textures, which might be a bit too much
 	// for this purpose,so we limit it to 4K
-	const int maxTexSize = (globalRendering->maxTextureSize<=4096) ? globalRendering->maxTextureSize : 4096;
+	const int maxTexSize = std::min(globalRendering->maxTextureSize, 4096);
 
 	texSizeX = maxTexSize;
 	texSizeY = std::max(iconSizeY, 4 * numOrientations * iconSizeX * iconSizeY / texSizeX); //! minimum space for 4 icons
 	texSizeY = next_power_of_2(texSizeY);
 
 	if (!fbo.IsValid()) {
-		logOutput.Print("Warning: FarTextureHandler: framebuffer not valid!");
+		LOG_L(L_WARNING, "framebuffer not valid!");
 		return;
 	}
 
-	glGenTextures(1,&farTexture);
-	glBindTexture(GL_TEXTURE_2D, farTexture);
+	glGenTextures(1, &farTextureID);
+	glBindTexture(GL_TEXTURE_2D, farTextureID);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -56,7 +64,7 @@ CFarTextureHandler::CFarTextureHandler()
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texSizeX, texSizeY, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
 	fbo.Bind();
-	fbo.AttachTexture(farTexture);
+	fbo.AttachTexture(farTextureID);
 	const bool status = fbo.CheckStatus("FARTEXTURE");
 	if (status) {
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -70,7 +78,7 @@ CFarTextureHandler::CFarTextureHandler()
 
 CFarTextureHandler::~CFarTextureHandler()
 {
-	glDeleteTextures(1, &farTexture);
+	glDeleteTextures(1, &farTextureID);
 	queuedForRender.clear();
 }
 
@@ -124,7 +132,8 @@ void CFarTextureHandler::CreateFarTexture(const CSolidObject* obj)
 	cache[obj->team][model->id] = -1;
 
 	//! check if there is enough free space in the atlas, if not try to resize it
-	const int maxSprites = (texSizeX / iconSizeX)*(texSizeY / iconSizeY) / numOrientations - 1;
+	const unsigned int maxSprites = ((texSizeX / iconSizeX) * (texSizeY / iconSizeY) / numOrientations) - 1;
+
 	if (usedFarTextures >= maxSprites) {
 		const int oldTexSizeY = texSizeY;
 
@@ -135,19 +144,19 @@ void CFarTextureHandler::CreateFarTexture(const CSolidObject* obj)
 		}
 
 		if (texSizeY > globalRendering->maxTextureSize) {
-			//logOutput.Print("Out of farTextures"); 
+			LOG_L(L_DEBUG, "Out of farTextures"); 
 			texSizeY = oldTexSizeY;
 			return;
 		}
 
 		unsigned char* oldPixels = new unsigned char[texSizeX*texSizeY*4];
-		glBindTexture(GL_TEXTURE_2D, farTexture);
+		glBindTexture(GL_TEXTURE_2D, farTextureID);
 		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, oldPixels);
 		memset(oldPixels + texSizeX*oldTexSizeY*4, 0, texSizeX*(texSizeY - oldTexSizeY)*4);
 
-		GLuint newFarTexture;
-		glGenTextures(1,&newFarTexture);
-		glBindTexture(GL_TEXTURE_2D, newFarTexture);
+		GLuint newFarTextureID;
+		glGenTextures(1, &newFarTextureID);
+		glBindTexture(GL_TEXTURE_2D, newFarTextureID);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -158,16 +167,16 @@ void CFarTextureHandler::CreateFarTexture(const CSolidObject* obj)
 		fbo.Bind();
 		fbo.UnattachAll();
 
-		glDeleteTextures(1,&farTexture);
-		farTexture = newFarTexture;
+		glDeleteTextures(1, &farTextureID);
+		farTextureID = newFarTextureID;
 
-		fbo.AttachTexture(farTexture);
+		fbo.AttachTexture(farTextureID);
 		fbo.CheckStatus("FARTEXTURE");
 		fbo.Unbind();
 	}
 
 	if (!fbo.IsValid()) {
-		//logOutput.Print("framebuffer not valid!");
+		LOG_L(L_DEBUG, "framebuffer not valid!");
 		return;
 	}
 
@@ -181,8 +190,8 @@ void CFarTextureHandler::CreateFarTexture(const CSolidObject* obj)
 	unitDrawer->SetupForUnitDrawing();
 	unitDrawer->GetOpaqueModelRenderer(model->type)->PushRenderState();
 
-	if (model->type == MODELTYPE_S3O || model->type == MODELTYPE_OBJ || model->type == MODELTYPE_ASS) {
-		// FIXME for some strange reason we need to invert the culling, why?
+	if (model->type != MODELTYPE_3DO) {
+		// FIXME: for some strange reason we need to invert the culling, why?
 		if (model->type == MODELTYPE_S3O) {
 			glCullFace(GL_FRONT);
 		}
@@ -236,8 +245,7 @@ void CFarTextureHandler::CreateFarTexture(const CSolidObject* obj)
 	fbo.Unattach(GL_DEPTH_ATTACHMENT_EXT);
 	fbo.Unbind();
 
-	usedFarTextures++;
-	cache[obj->team][model->id] = usedFarTextures;
+	cache[obj->team][model->id] = ++usedFarTextures;
 }
 
 
@@ -263,7 +271,7 @@ void CFarTextureHandler::DrawFarTexture(const CSolidObject* obj, CVertexArray* v
 
 	const float iconSizeX = float(this->iconSizeX) / texSizeX;
 	const float iconSizeY = float(this->iconSizeY) / texSizeY;
-	const float2 texcoords = GetTextureCoords(farTextureNum-1, orient);
+	const float2 texcoords = GetTextureCoords(farTextureNum - 1, orient);
 
 	const float3 curad = camera->up *    obj->radius;
 	const float3 crrad = camera->right * obj->radius;
@@ -290,7 +298,7 @@ void CFarTextureHandler::Draw()
 	//! create new faricons
 	for (GML_VECTOR<const CSolidObject*>::iterator it = queuedForRender.begin(); it != queuedForRender.end(); ++it) {
 		const CSolidObject& obj = **it;
-		if (cache.size()<=obj.team || cache[obj.team].size()<=obj.model->id || !cache[obj.team][obj.model->id]) {
+		if (cache.size() <= obj.team || cache[obj.team].size() <= obj.model->id || !cache[obj.team][obj.model->id]) {
 			CreateFarTexture(*it);
 		}
 	}
@@ -299,11 +307,11 @@ void CFarTextureHandler::Draw()
 	glAlphaFunc(GL_GREATER, 0.5f);
 	glActiveTexture(GL_TEXTURE0);
 	glEnable(GL_TEXTURE_2D);
-	glBindTexture(GL_TEXTURE_2D, farTexture);
+	glBindTexture(GL_TEXTURE_2D, farTextureID);
 	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	glNormal3fv((const GLfloat*) &unitDrawer->camNorm.x);
 
-	IBaseSky::SetFog();
+	ISky::SetupFog();
 
 	CVertexArray* va = GetVertexArray();
 	va->Initialize();

@@ -28,16 +28,17 @@
 #include "LuaZip.h"
 #include "LuaInclude.h"
 #include "LuaHashString.h"
-#include "System/FileSystem/ArchiveZip.h"
+#include "System/FileSystem/IArchive.h"
+#include "System/FileSystem/ArchiveLoader.h"
+#include "System/FileSystem/DataDirsAccess.h"
 #include "System/FileSystem/FileHandler.h"
-#include "System/FileSystem/FileSystem.h"
-#include "System/LogOutput.h"
+#include "System/FileSystem/FileQueryFlags.h"
 #include "System/Util.h"
 #include "lib/minizip/zip.h"
 #include <cstring>
 #include <sstream>
 #include <string>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 using std::string;
 
@@ -132,7 +133,7 @@ bool LuaZipFileWriter::PushNew(lua_State* L, const string& filename, zipFile zip
 		udata->dontClose = true;
 	}
 	else {
-		string realname = filesystem.LocateFile(filename, FileSystem::WRITE | FileSystem::CREATE_DIRS);
+		string realname = dataDirsAccess.LocateFile(filename, FileQueryFlags::WRITE | FileQueryFlags::CREATE_DIRS);
 		if (!realname.empty() && !FileExists(realname)) {
 			udata->zip = zipOpen(realname.c_str(), APPEND_STATUS_CREATE);
 		}
@@ -254,7 +255,7 @@ bool LuaZipFileReader::CreateMetatable(lua_State* L)
 
 
 struct ZipFileReaderUserdata {
-	CArchiveBase* archive;
+	IArchive* archive;
 	std::stringstream* stream;
 	bool dontClose;
 };
@@ -271,7 +272,7 @@ struct ZipFileReaderUserdata {
  *  - the type is currently forced to a zip-file, while allowing any file extension
  *  - this archive may be closed by Lua (close() or GC)
  */
-bool LuaZipFileReader::PushNew(lua_State* L, const string& filename, CArchiveBase* archive)
+bool LuaZipFileReader::PushNew(lua_State* L, const string& filename, IArchive* archive)
 {
 	lua_checkstack(L, 2);
 
@@ -285,9 +286,9 @@ bool LuaZipFileReader::PushNew(lua_State* L, const string& filename, CArchiveBas
 		udata->dontClose = true;
 	}
 	else {
-		string realname = filesystem.LocateFile(filename);
+		string realname = dataDirsAccess.LocateFile(filename);
 		if (!realname.empty()) {
-			udata->archive = new CArchiveZip(realname);
+			udata->archive = archiveLoader.OpenArchive(realname, "sdz");
 		}
 	}
 
@@ -382,7 +383,7 @@ static int read_chars(lua_State *L, ZipFileReaderUserdata* f, size_t n)
 /**
  * Similar to Lua's built-in (I/O library) read function.
  *
- * Except that "*number" and *line" aren't supported; only "*all" and <num> are
+ * Except that "*number" and *line" aren't supported; only "*all" and \<num\> are
  * supported. The special case read(0) (test for end of file) is handled.
  *
  * Note that reading is only possible after a chunk has been opened using

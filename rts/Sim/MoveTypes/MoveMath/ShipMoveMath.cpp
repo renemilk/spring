@@ -1,10 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include "ShipMoveMath.h"
 #include "Map/ReadMap.h"
 #include "Sim/Objects/SolidObject.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CShipMoveMath, CMoveMath, );
 

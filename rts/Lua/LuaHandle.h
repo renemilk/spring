@@ -2,16 +2,9 @@
 
 #ifndef LUA_HANDLE_H
 #define LUA_HANDLE_H
-
-#include <string>
-#include <vector>
-#include <set>
-using std::string;
-using std::vector;
-using std::set;
 #include <boost/cstdint.hpp>
 
-#include "EventClient.h"
+#include "System/EventClient.h"
 //FIXME#include "LuaArrays.h"
 #include "LuaCallInCheck.h"
 #include "LuaShaders.h"
@@ -22,7 +15,13 @@ using std::set;
 //FIXME#include "LuaVBOs.h"
 #include "LuaDisplayLists.h"
 #include "System/Platform/Threading.h"
-#include "System/LogOutput.h"
+
+#include <string>
+#include <vector>
+#include <set>
+using std::string;
+using std::vector;
+using std::set;
 
 
 #define LUA_HANDLE_ORDER_RULES            100
@@ -39,13 +38,14 @@ class CWeapon;
 class CFeature;
 class CProjectile;
 struct Command;
+struct SRectangle;
 struct LuaHashString;
 struct lua_State;
-class CLogSubsystem;
 class CLuaHandle;
 
+
 struct luaContextData {
-	luaContextData() : fullCtrl(false), fullRead(false), ctrlTeam(CEventClient::NoAccessTeam), 
+	luaContextData() : fullCtrl(false), fullRead(false), ctrlTeam(CEventClient::NoAccessTeam),
 		readTeam(0), readAllyTeam(0), selectTeam(CEventClient::NoAccessTeam), synced(false), owner(NULL) {}
 	bool fullCtrl;
 	bool fullRead;
@@ -135,7 +135,7 @@ class CLuaHandle : public CEventClient
 
 		void Shutdown();
 
-		void Load(CArchiveBase* archive);
+		void Load(IArchive* archive);
 
 		void GamePreload();
 		void GameStart();
@@ -201,6 +201,7 @@ class CLuaHandle : public CEventClient
 
 		void Save(zipFile archive);
 
+		void UnsyncedHeightMapUpdate(const SRectangle& rect);
 		void Update();
 
 		bool KeyPress(unsigned short key, bool isRepeat);
@@ -219,7 +220,7 @@ class CLuaHandle : public CEventClient
 
 		bool CommandNotify(const Command& cmd);
 
-		bool AddConsoleLine(const string& msg, const CLogSubsystem& sys);
+		bool AddConsoleLine(const string& msg, const string& section, int level);
 
 		bool GroupChanged(int groupID);
 
@@ -249,9 +250,13 @@ class CLuaHandle : public CEventClient
 		void DrawScreen();
 		void DrawInMiniMap();
 
+		/// @brief this UNSYNCED event is generated every gameProgressFrameInterval ( defined in gameserver.cpp ), skips network queuing and caching and it's useful
+		/// to calculate the current fast-forwarding % compared to the real game
+		void GameProgress(int frameNum);
+
 	public: // custom call-in  (inter-script calls)
 		virtual bool HasSyncedXCall(const string& funcName) { return false; }
-		virtual bool HasUnsyncedXCall(const string& funcName) { return false; }
+		virtual bool HasUnsyncedXCall(lua_State* srcState, const string& funcName) { return false; }
 		virtual int SyncedXCall(lua_State* srcState, const string& funcName) {
 			return 0;
 		}
@@ -299,6 +304,8 @@ class CLuaHandle : public CEventClient
 		static inline bool UseDualStates() { return (LUA_MT_OPT & LUA_STATE) && useDualStates; } // Is Lua handle splitting enabled (globally)?
 		bool useEventBatch;
 		inline bool UseEventBatch() const { return (LUA_MT_OPT & LUA_BATCH) && useEventBatch; } // Use event batch to forward "synced" luaui events into draw thread?
+		bool purgeRecvFromSyncedBatch;
+		inline bool PurgeRecvFromSyncedBatch() const { return (LUA_MT_OPT & LUA_STATE) && purgeRecvFromSyncedBatch; } // Automatically clean deleted objects from the SendToUnsynced batch
 
 		inline lua_State *GetActiveState() {
 			return (SingleState() || Threading::IsSimThread()) ? L_Sim : L_Draw;
@@ -345,7 +352,9 @@ class CLuaHandle : public CEventClient
 
 		bool printTracebacks;
 
-		vector<bool> watchWeapons; // for the Explosion call-in
+		vector<bool> watchUnitDefs;
+		vector<bool> watchFeatureDefs;
+		vector<bool> watchWeaponDefs; // for the Explosion call-in
 
 		int callinErrors;
 
@@ -395,45 +404,44 @@ class CLuaHandle : public CEventClient
 		static void HandleLuaMsg(int playerID, int script, int mode,
 			const std::vector<boost::uint8_t>& msg);
 		static inline bool IsDrawCallIn() {
-			return (LUA_MT_OPT & LUA_STATE) && !Threading::IsSimThread();
+			return (LUA_MT_OPT & LUA_MUTEX) && !Threading::IsSimThread();
 		}
 		void ExecuteUnitEventBatch();
 		void ExecuteFeatEventBatch();
 		void ExecuteObjEventBatch();
 		void ExecuteProjEventBatch();
 		void ExecuteFrameEventBatch();
-		void ExecuteMiscEventBatch();
+		void ExecuteLogEventBatch();
 
 	protected: // static
 		static bool devMode; // allows real file access
 		static bool modUICtrl; // allows non-user scripts to use UI controls
 
-		std::vector<LuaUnitEvent>luaUnitEventBatch;
-		std::vector<LuaFeatEvent>luaFeatEventBatch;
-		std::vector<LuaObjEvent>luaObjEventBatch;
-		std::vector<LuaProjEvent>luaProjEventBatch;
-		std::vector<int>luaFrameEventBatch;
-		std::vector<LuaMiscEvent>luaMiscEventBatch;
-		bool execUnitBatch;
-		bool execFeatBatch;
-		bool execObjBatch;
-		bool execProjBatch;
-		bool execFrameBatch;
-		bool execMiscBatch;
+		std::vector<LuaUnitEvent> luaUnitEventBatch;
+		std::vector<LuaFeatEvent> luaFeatEventBatch;
+		std::vector<LuaObjEvent> luaObjEventBatch;
+		std::vector<LuaProjEvent> luaProjEventBatch;
+		std::vector<int> luaFrameEventBatch;
+		std::vector<LuaLogEvent> luaLogEventBatch;
 
 		// FIXME: because CLuaUnitScript needs to access RunCallIn / activeHandle
 		friend class CLuaUnitScript;
 	private:
 		struct staticLuaContextData {
-			staticLuaContextData() : activeFullRead(false), activeReadAllyTeam(CEventClient::NoAccessTeam), activeHandle(NULL) {}
+			staticLuaContextData() : activeFullRead(false), activeReadAllyTeam(CEventClient::NoAccessTeam), 
+				activeHandle(NULL), drawingEnabled(false) {}
 			bool activeFullRead;
 			int  activeReadAllyTeam;
 			CLuaHandle* activeHandle;
+			bool drawingEnabled;
 		};
 		static staticLuaContextData S_Sim;
 		static staticLuaContextData S_Draw;
 
+	protected:
 		static staticLuaContextData &GetStaticLuaContextData(bool draw = IsDrawCallIn()) { return draw ? S_Draw : S_Sim; }
+
+		friend class LuaOpenGL; // to access staticLuaContextData::drawingEnabled
 };
 
 
@@ -487,3 +495,4 @@ inline int ActiveReadAllyTeam() { return CLuaHandle::GetActiveReadAllyTeam(); }
 
 
 #endif /* LUA_HANDLE_H */
+

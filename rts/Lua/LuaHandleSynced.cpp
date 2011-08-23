@@ -1,11 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include <set>
 #include <cctype>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaHandleSynced.h"
 
@@ -33,21 +32,23 @@
 #include "LuaVFS.h"
 #include "LuaZip.h"
 
-#include "ConfigHandler.h"
-#include "Game/Game.h"
+#include "System/Config/ConfigHandler.h"
 #include "Game/WordCompletion.h"
 #include "Sim/Misc/GlobalSynced.h"
 #include "Sim/Misc/TeamHandler.h"
+#include "Sim/Features/FeatureHandler.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
+#include "Sim/Units/UnitDefHandler.h"
 #include "Sim/Units/CommandAI/Command.h"
 #include "Sim/Units/Scripts/CobInstance.h"
 #include "Sim/Units/Scripts/LuaUnitScript.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
-#include "EventHandler.h"
-#include "LogOutput.h"
-#include "FileSystem/FileHandler.h"
-#include "FileSystem/FileSystem.h"
+#include "System/EventHandler.h"
+#include "System/GlobalConfig.h"
+#include "System/Log/ILog.h"
+#include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/FileSystem.h"
 
 
 static const LuaHashString unsyncedStr("UNSYNCED");
@@ -74,6 +75,10 @@ CLuaHandleSynced::~CLuaHandleSynced()
 {
 	// kill all unitscripts running in this handle
 	CLuaUnitScript::HandleFreed(this);
+
+	watchUnitDefs.clear();
+	watchFeatureDefs.clear();
+	watchWeaponDefs.clear();
 }
 
 
@@ -81,10 +86,12 @@ CLuaHandleSynced::~CLuaHandleSynced()
 
 
 void CLuaHandleSynced::UpdateThreading() {
-	useDualStates = (gc->GetMultiThreadLua() >= 3);
-	singleState = (gc->GetMultiThreadLua() <= 2);
-	copyExportTable = (gc->GetMultiThreadLua() == 3);
+	int mtl = globalConfig->GetMultiThreadLua();
+	useDualStates = (mtl == MT_LUA_DUAL_EXPORT || mtl == MT_LUA_DUAL || mtl == MT_LUA_DUAL_ALL);
+	singleState = (mtl == MT_LUA_NONE || mtl == MT_LUA_SINGLE || mtl == MT_LUA_SINGLE_BATCH);
+	copyExportTable = (mtl == MT_LUA_DUAL_EXPORT);
 	useEventBatch = false;
+	purgeRecvFromSyncedBatch = !singleState && (mtl != MT_LUA_DUAL_ALL);
 }
 
 
@@ -97,9 +104,9 @@ void CLuaHandleSynced::Init(const string& syncedFile,
 	}
 
 	if (GetFullCtrl()) {
-		for (int w = 0; w < weaponDefHandler->numWeaponDefs; w++) {
-			watchWeapons.push_back(false);
-		}
+		watchUnitDefs.resize(unitDefHandler->unitDefs.size() + 1, false);
+		watchFeatureDefs.resize(featureHandler->GetFeatureDefs().size(), false);
+		watchWeaponDefs.resize(weaponDefHandler->numWeaponDefs, false);
 	}
 
 	const string syncedCode   = LoadFile(syncedFile, modes);
@@ -143,7 +150,7 @@ void CLuaHandleSynced::Init(const string& syncedFile,
 		return;
 	}
 
-	CLuaHandle* origHandle = GetActiveHandle();
+	CLuaHandle* origHandle = CLuaHandle::GetActiveHandle();
 	SetActiveHandle(L);
 
 	SetAllowChanges(true, true);
@@ -204,8 +211,12 @@ bool CLuaHandleSynced::SetupSynced(lua_State *L, const string& code, const strin
 	LuaPushNamedCFunc(L, "AddActionFallback",    AddSyncedActionFallback);
 	LuaPushNamedCFunc(L, "RemoveActionFallback", RemoveSyncedActionFallback);
 	LuaPushNamedCFunc(L, "UpdateCallIn",         CallOutSyncedUpdateCallIn);
-	LuaPushNamedCFunc(L, "GetWatchWeapon",       GetWatchWeapon);
-	LuaPushNamedCFunc(L, "SetWatchWeapon",       SetWatchWeapon);
+	LuaPushNamedCFunc(L, "GetWatchUnit",         GetWatchUnitDef);
+	LuaPushNamedCFunc(L, "SetWatchUnit",         SetWatchUnitDef);
+	LuaPushNamedCFunc(L, "GetWatchFeature",      GetWatchFeatureDef);
+	LuaPushNamedCFunc(L, "SetWatchFeature",      SetWatchFeatureDef);
+	LuaPushNamedCFunc(L, "GetWatchWeapon",       GetWatchWeaponDef);
+	LuaPushNamedCFunc(L, "SetWatchWeapon",       SetWatchWeaponDef);
 	lua_pop(L, 1);
 
 	// add the custom file loader
@@ -384,7 +395,7 @@ bool CLuaHandleSynced::SyncifyRandomFuncs(lua_State *L)
 	// adjust the math.random() and math.randomseed() calls
 	lua_getglobal(L, "math");
 	if (!lua_istable(L, -1)) {
-		logOutput.Print("lua.math does not exist\n");
+		LOG_L(L_WARNING, "lua.math does not exist");
 		return false;
 	}
 
@@ -445,7 +456,7 @@ bool CLuaHandleSynced::SetupUnsyncedFunction(lua_State *L, const char* funcName)
 	unsyncedStr.GetRegistry(L);
 	if (!lua_istable(L, -1)) {
 		lua_settop(L, 0);
-//FIXME		logOutput.Print("ERROR: missing UNSYNCED table for %s", name.c_str());
+// FIXME		LOG_L(L_ERROR, "missing UNSYNCED table for %s", name.c_str());
 		return false;
 	}
 	const int unsynced = lua_gettop(L);
@@ -461,7 +472,8 @@ bool CLuaHandleSynced::SetupUnsyncedFunction(lua_State *L, const char* funcName)
 	}
 	else if (!lua_isfunction(L, -1)) {
 		lua_settop(L, 0);
-		logOutput.Print("%s in %s is not a function", funcName, GetName().c_str());
+		LOG_L(L_WARNING, "%s in %s is not a function",
+				funcName, GetName().c_str());
 		return false;
 	}
 	lua_pushvalue(L, unsynced);
@@ -524,8 +536,8 @@ bool CLuaHandleSynced::LoadUnsyncedCode(lua_State *L, const string& code, const 
 	int error;
 	error = luaL_loadbuffer(L, code.c_str(), code.size(), debug.c_str());
 	if (error != 0) {
-		logOutput.Print("error = %i, %s, %s\n",
-		                error, debug.c_str(), lua_tostring(L, -1));
+		LOG_L(L_ERROR, "error = %i, %s, %s",
+				error, debug.c_str(), lua_tostring(L, -1));
 		lua_settop(L, 0);
 		return false;
 	}
@@ -543,8 +555,8 @@ bool CLuaHandleSynced::LoadUnsyncedCode(lua_State *L, const string& code, const 
 	SetActiveHandle(orig);
 
 	if (error != 0) {
-		logOutput.Print("error = %i, %s, %s\n",
-		                error, debug.c_str(), lua_tostring(L, -1));
+		LOG_L(L_ERROR, "error = %i, %s, %s",
+				error, debug.c_str(), lua_tostring(L, -1));
 		lua_settop(L, 0);
 		return false;
 	}
@@ -651,7 +663,7 @@ bool CLuaHandleSynced::Initialize(const string& syncData)
 	}
 
 	int errfunc = SetupTraceback(L) ? -2 : 0;
-	logOutput.Print("Initialize errfunc=%d\n", errfunc);
+	LOG("Initialize errfunc=%d", errfunc);
 
 	lua_pushsstring(L, syncData);
 
@@ -797,7 +809,7 @@ bool CLuaHandleSynced::HasSyncedXCall(const string& funcName)
 	if (L != L_Sim)
 		return false;
 
-	GML_MEASURE_LOCK_TIME(GML_THRMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
+	GML_MEASURE_LOCK_TIME(GML_OBJMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
 
 	lua_pushvalue(L, LUA_GLOBALSINDEX);
 	if (!lua_istable(L, -1)) {
@@ -812,11 +824,11 @@ bool CLuaHandleSynced::HasSyncedXCall(const string& funcName)
 }
 
 
-bool CLuaHandleSynced::HasUnsyncedXCall(const string& funcName)
+bool CLuaHandleSynced::HasUnsyncedXCall(lua_State* srcState, const string& funcName)
 {
 	SELECT_UNSYNCED_LUA_STATE();
 
-	GML_MEASURE_LOCK_TIME(GML_THRMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
+	GML_MEASURE_LOCK_TIME(GML_OBJMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
 
 	unsyncedStr.GetRegistry(L); // push the UNSYNCED table
 	if (!lua_istable(L, -1)) {
@@ -892,7 +904,7 @@ int CLuaHandleSynced::SyncedXCall(lua_State* srcState, const string& funcName)
 	if (L != L_Sim)
 		return 0;
 
-	GML_MEASURE_LOCK_TIME(GML_THRMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
+	GML_MEASURE_LOCK_TIME(GML_OBJMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
 
 	lua_pushvalue(L, LUA_GLOBALSINDEX);
 	const int retval = XCall(L, srcState, funcName);
@@ -904,7 +916,7 @@ int CLuaHandleSynced::UnsyncedXCall(lua_State* srcState, const string& funcName)
 {
 	SELECT_UNSYNCED_LUA_STATE();
 
-	GML_MEASURE_LOCK_TIME(GML_THRMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
+	GML_MEASURE_LOCK_TIME(GML_OBJMUTEX_LOCK(lua, GML_DRAW|GML_SIM, *L->));
 
 	const bool prevSynced = GetSynced(L);
 	SetSynced(L, false);
@@ -1060,8 +1072,8 @@ int CLuaHandleSynced::CallAsTeam(lua_State* L)
 	SetActiveReadAllyTeam(prevReadAllyTeam);
 
 	if (error != 0) {
-		logOutput.Print("error = %i, %s, %s\n",
-		                error, "CallAsTeam", lua_tostring(L, -1));
+		LOG_L(L_ERROR, "error = %i, %s, %s",
+				error, "CallAsTeam", lua_tostring(L, -1));
 		lua_error(L);
 	}
 
@@ -1091,7 +1103,7 @@ int CLuaHandleSynced::AddSyncedActionFallback(lua_State* L)
 
 	CLuaHandleSynced* lhs = GetActiveHandle(L);
 	lhs->textCommands[cmd] = lua_tostring(L, 2);
-	game->wordCompletion->AddWord(cmdRaw, true, false, false);
+	wordCompletion->AddWord(cmdRaw, true, false, false);
 	lua_pushboolean(L, true);
 	return 1;
 }
@@ -1122,7 +1134,7 @@ int CLuaHandleSynced::RemoveSyncedActionFallback(lua_State* L)
 	map<string, string>::iterator it = lhs->textCommands.find(cmd);
 	if (it != lhs->textCommands.end()) {
 		lhs->textCommands.erase(it);
-		game->wordCompletion->RemoveWord(cmdRaw);
+		wordCompletion->RemoveWord(cmdRaw);
 		lua_pushboolean(L, true);
 	} else {
 		lua_pushboolean(L, false);
@@ -1133,32 +1145,42 @@ int CLuaHandleSynced::RemoveSyncedActionFallback(lua_State* L)
 
 /******************************************************************************/
 
-int CLuaHandleSynced::GetWatchWeapon(lua_State* L)
-{
-	CLuaHandleSynced* lhs = GetActiveHandle(L);
-	const int weaponID = luaL_checkint(L, 1);
-	if ((weaponID < 0) || (weaponID >= (int)lhs->watchWeapons.size())) {
-		return 0;
+#define GetWatchDef(DefType)                                          \
+	int CLuaHandleSynced::GetWatch ## DefType ## Def(lua_State* L) {  \
+		CLuaHandleSynced* lhs = GetActiveHandle(L);                   \
+		const unsigned int defID = luaL_checkint(L, 1);               \
+		if (defID >= lhs->watch ## DefType ## Defs.size()) {          \
+			return 0;                                                 \
+		}                                                             \
+		lua_pushboolean(L, lhs->watch ## DefType ## Defs[defID]);     \
+		return 1;                                                     \
 	}
-	lua_pushboolean(L, lhs->watchWeapons[weaponID]);
-	return 1;
-}
 
-
-int CLuaHandleSynced::SetWatchWeapon(lua_State* L)
-{
-	CLuaHandleSynced* lhs = GetActiveHandle(L);
-	const int weaponID = luaL_checkint(L, 1);
-	if ((weaponID < 0) || (weaponID >= (int)lhs->watchWeapons.size())) {
-		return 0;
+#define SetWatchDef(DefType)                                          \
+	int CLuaHandleSynced::SetWatch ## DefType ## Def(lua_State* L) {  \
+		CLuaHandleSynced* lhs = GetActiveHandle(L);                   \
+		const unsigned int defID = luaL_checkint(L, 1);               \
+		if (defID >= lhs->watch ## DefType ## Defs.size()) {          \
+			return 0;                                                 \
+		}                                                             \
+		if (!lua_isboolean(L, 2)) {                                   \
+			luaL_error(L, "Incorrect arguments to %s", __FUNCTION__); \
+			return 0;                                                 \
+		}                                                             \
+		lhs->watch ## DefType ## Defs[defID] = lua_toboolean(L, 2);   \
+		return 0;                                                     \
 	}
-	if (!lua_isboolean(L, 2)) {
-		luaL_error(L, "Incorrect arguments to SetWatchWeapon()");
-	}
-	lhs->watchWeapons[weaponID] = lua_toboolean(L, 2);
-	return 0;
-}
 
+GetWatchDef(Unit)
+GetWatchDef(Feature)
+GetWatchDef(Weapon)
+
+SetWatchDef(Unit)
+SetWatchDef(Feature)
+SetWatchDef(Weapon)
+
+#undef GetWatchDef
+#undef SetWatchDef
 
 /******************************************************************************/
 /******************************************************************************/

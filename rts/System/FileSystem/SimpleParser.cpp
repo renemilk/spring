@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "SimpleParser.h"
 #include "FileHandler.h"
@@ -100,4 +99,26 @@ std::vector<std::string> CSimpleParser::Tokenize(const std::string& line, int mi
 	}
 
 	return words;
+}
+
+
+std::vector<std::string> CSimpleParser::Split(const std::string& str, const std::string& delimitters) {
+
+	std::vector<std::string> tokens;
+
+	// Skip delimiters at beginning.
+	std::string::size_type lastPos = str.find_first_not_of(delimitters, 0);
+	// Find first "non-delimiter".
+	std::string::size_type pos     = str.find_first_of(delimitters, lastPos);
+
+	while (std::string::npos != pos || std::string::npos != lastPos) {
+		// Found a token, add it to the vector.
+		tokens.push_back(str.substr(lastPos, pos - lastPos));
+		// Skip delimiters. Note the "not_of"
+		lastPos = str.find_first_not_of(delimitters, pos);
+		// Find next "non-delimiter"
+		pos = str.find_first_of(delimitters, lastPos);
+	}
+
+	return tokens;
 }

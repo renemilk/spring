@@ -1,7 +1,3 @@
-#ifdef _MSC_VER
-#include "StdAfx.h"
-#endif
-
 #include <string>
 #include <iostream>
 #include <cstdlib>
@@ -17,17 +13,25 @@
 #include "Game/ClientSetup.h"
 #include "Game/GameData.h"
 #include "Game/GameVersion.h"
-#include "System/FileSystem/FileSystemHandler.h"
+#include "System/FileSystem/FileSystemInitializer.h"
 #include "System/FileSystem/ArchiveScanner.h"
 #include "System/FileSystem/VFSHandler.h"
 #include "System/FileSystem/FileHandler.h"
 #include "System/LoadSave/DemoRecorder.h"
-#include "System/ConfigHandler.h"
+#include "System/Platform/CrashHandler.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/GlobalConfig.h"
 #include "System/Exceptions.h"
 #include "System/UnsyncedRNG.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
+#endif
+
+#ifdef __APPLE__
+//FIXME: hack for SDL because of sdl-stubs
+#undef main
 #endif
 
 int main(int argc, char* argv[])
@@ -35,6 +39,8 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	try {
 #endif
+	// Initialize crash reporting
+	CrashHandler::Install();
 
 	if (argc != 2) {
 		printf("[DS] usage: %s <full_path_to_script | --version>\n", argv[0]);
@@ -54,7 +60,8 @@ int main(int argc, char* argv[])
 	SDL_Init(SDL_INIT_TIMER);
 
 	ConfigHandler::Instantiate(); // use the default config file
-	FileSystemHandler::Initialize(false);
+	GlobalConfig::Instantiate();
+	FileSystemInitializer::Initialize();
 
 	CGameServer* server = NULL;
 	CGameSetup* gameSetup = NULL;
@@ -131,10 +138,7 @@ int main(int argc, char* argv[])
 			printf("[DS] recording demo: %s\n", (demoRec->GetName()).c_str());
 			printf("[DS] using mod: %s\n", (gameSetup->modName).c_str());
 			printf("[DS] using map: %s\n", (gameSetup->mapName).c_str());
-			printf("[DS] GameID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-				gameID[ 0], gameID[ 1], gameID[ 2], gameID[ 3], gameID[ 4], gameID[ 5], gameID[ 6], gameID[ 7],
-				gameID[ 8], gameID[ 9], gameID[10], gameID[11], gameID[12], gameID[13], gameID[14], gameID[15]
-			);
+			printf("[DS] GameID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n", gameID[0], gameID[1], gameID[2], gameID[3], gameID[4], gameID[5], gameID[6], gameID[7], gameID[8], gameID[9], gameID[10], gameID[11], gameID[12], gameID[13], gameID[14], gameID[15]);
 		}
 
 		// wait 1 second between checks
@@ -147,14 +151,15 @@ int main(int argc, char* argv[])
 
 	delete server;
 
-	FileSystemHandler::Cleanup();
+	FileSystemInitializer::Cleanup();
+	GlobalConfig::Deallocate();
 	ConfigHandler::Deallocate();
 
 #ifdef _WIN32
-	} catch (const std::exception& err) {
-		printf("[DS] exception raised: %s\n", err.what());
-		return 1;
-	}
+} catch (const std::exception& err) {
+	printf("[DS] exception raised: %s\n", err.what());
+	return 1;
+}
 #endif
 
 	return 0;

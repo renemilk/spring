@@ -1,17 +1,19 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <assert.h>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "ExternalAI/SkirmishAIHandler.h"
 #include "Game/Player.h"
 #include "Game/PlayerHandler.h"
 #include "Game/Camera.h"
 #include "Game/CameraHandler.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/SelectedUnits.h"
+#include "Game/UI/LuaUI.h"
 #include "Game/UI/MouseHandler.h"
+#include "Game/UI/UnitTracker.h"
 #include "Lua/LuaRules.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/GlobalSynced.h"
@@ -19,8 +21,7 @@
 #include "Sim/Units/UnitHandler.h"
 #include "System/myMath.h"
 #include "System/EventHandler.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 
 CR_BIND(CPlayer,);
 
@@ -78,7 +79,7 @@ void CPlayer::SetControlledTeams()
 	// AI teams
 	const CSkirmishAIHandler::id_ai_t aiIds = skirmishAIHandler.GetAllSkirmishAIs();
 	for (CSkirmishAIHandler::id_ai_t::const_iterator ai = aiIds.begin(); ai != aiIds.end(); ++ai) {
-		const bool isHostedByUs   = (ai->second.hostPlayer == playerNum);
+		const bool isHostedByUs = (ai->second.hostPlayer == playerNum);
 		if (isHostedByUs) {
 			controlledTeams.insert(ai->second.team);
 		}
@@ -105,13 +106,41 @@ void CPlayer::StartSpectating()
 
 	spectator = true;
 
-	if (gu->myPlayerNum == this->playerNum) { //TODO bad hack
+	if (gu->myPlayerNum == this->playerNum) {
+		// HACK: unsynced code should just listen for the PlayerChanged event
 		gu->spectating           = true;
 		gu->spectatingFullView   = true;
 		gu->spectatingFullSelect = true;
+
+		CLuaUI::UpdateTeams();
+		selectedUnits.ClearSelected();
+		unitTracker.Disable();
 	}
 
 	StopControllingUnit();
+	eventHandler.PlayerChanged(playerNum);
+}
+
+void CPlayer::JoinTeam(int newTeam)
+{
+	// a player that joins a team always stops spectating
+	spectator = false;
+	team = newTeam;
+
+	if (gu->myPlayerNum == this->playerNum) {
+		// HACK: see StartSpectating
+		gu->myPlayingTeam = gu->myTeam = newTeam;
+		gu->myPlayingAllyTeam = gu->myAllyTeam = teamHandler->AllyTeam(gu->myTeam);
+
+		gu->spectating           = false;
+		gu->spectatingFullView   = false;
+		gu->spectatingFullSelect = false;
+
+		CLuaUI::UpdateTeams();
+		selectedUnits.ClearSelected();
+		unitTracker.Disable();
+	}
+
 	eventHandler.PlayerChanged(playerNum);
 }
 
@@ -149,23 +178,27 @@ void CPlayer::StartControllingUnit()
 			return;
 		}
 
-
 		if (newControlleeUnit->fpsControlPlayer != NULL) {
 			if (this->playerNum == gu->myPlayerNum) {
-				logOutput.Print(
-					"player %d (%s) is already controlling unit %d",
-					newControlleeUnit->fpsControlPlayer->playerNum,
-					newControlleeUnit->fpsControlPlayer->name.c_str(),
-					newControlleeUnit->id
-				);
+				LOG_L(L_WARNING,
+						"player %d (%s) is already controlling unit %d",
+						newControlleeUnit->fpsControlPlayer->playerNum,
+						newControlleeUnit->fpsControlPlayer->name.c_str(),
+						newControlleeUnit->id);
 			}
+
+			return;
 		}
-		else if (luaRules == NULL || luaRules->AllowDirectUnitControl(this->playerNum, newControlleeUnit)) {
+
+		if (luaRules == NULL || luaRules->AllowDirectUnitControl(this->playerNum, newControlleeUnit)) {
 			newControlleeUnit->fpsControlPlayer = this;
 			fpsController.SetControlleeUnit(newControlleeUnit);
+			selectedUnits.ClearNetSelect(this->playerNum);
 
 			if (this->playerNum == gu->myPlayerNum) {
 				// update the unsynced state
+				selectedUnits.ClearSelected();
+
 				gu->fpsMode = true;
 				mouse->wasLocked = mouse->locked;
 
@@ -175,7 +208,6 @@ void CPlayer::StartControllingUnit()
 				}
 				camHandler->PushMode();
 				camHandler->SetCameraMode(0);
-				selectedUnits.ClearSelected();
 			}
 		}
 	}
@@ -191,11 +223,16 @@ void CPlayer::StopControllingUnit()
 	CUnit* thatUnit = that->fpsController.GetControllee();
 	CUnit* thisUnit = this->fpsController.GetControllee();
 
+	// note: probably better to issue CMD_STOP via thisUnit->commandAI
+	thisUnit->AttackUnit(NULL, false, true);
 	thisUnit->fpsControlPlayer = NULL;
-	thisUnit->AttackUnit(NULL, true, true);
+	fpsController.SetControlleeUnit(NULL);
+	selectedUnits.ClearNetSelect(this->playerNum);
 
 	if (thatUnit == thisUnit) {
-		// update the  unsynced state
+		// update the unsynced state
+		selectedUnits.ClearSelected();
+
 		gu->fpsMode = false;
 		assert(gu->myPlayerNum == this->playerNum);
 
@@ -207,6 +244,4 @@ void CPlayer::StopControllingUnit()
 			mouse->ShowMouse();
 		}
 	}
-
-	fpsController.SetControlleeUnit(NULL);
 }

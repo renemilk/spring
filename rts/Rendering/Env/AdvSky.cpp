@@ -1,24 +1,20 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "AdvSky.h"
 
 #include "Game/Camera.h"
 #include "Map/MapInfo.h"
-#include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Rendering/Textures/Bitmap.h"
-#include "Exceptions.h"
-
-#include "LogOutput.h"
-#include "TimeProfiler.h"
-#include "ConfigHandler.h"
-#include "Matrix44f.h"
-#include "myMath.h"
-#include "GlobalUnsynced.h"
+#include "Sim/Misc/GlobalSynced.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/Exceptions.h"
+#include "System/TimeProfiler.h"
+#include "System/Matrix44f.h"
+#include "System/myMath.h"
 
 #define Y_PART 10.0
 #define X_PART 10.0
@@ -28,45 +24,69 @@
 
 
 CAdvSky::CAdvSky()
+	: skydir1(ZeroVector)
+	, skydir2(ZeroVector)
+	, cdtex(0)
+	, cloudFP(0)
+	, drawFlare(false)
+	, cloudTexMem(NULL)
+	, skyTex(0)
+	, skyDot3Tex(0)
+	, cloudDot3Tex(0)
+	, sunTex(0)
+	, sunFlareTex(0)
+	, skyTexUpdateIter(0)
+	, skyDomeList(0)
+	, sunFlareList(0)
+	, skyAngle(0.0f)
+	, domeheight(0.0f)
+	, domeWidth(0.0f)
+	, sunTexCoordX(0.0f)
+	, sunTexCoordY(0.0f)
+	, randMatrix(NULL)
+	, rawClouds(NULL)
+	, blendMatrix(NULL)
+	, cloudThickness(NULL)
+	, oldCoverBaseX(-5)
+	, oldCoverBaseY(0)
+	, updatecounter(0)
 {
-	sunFlareList = 0;
 	skytexpart = new unsigned char[512][4];
-	skyTexUpdateIter = 0;
 
-	if (!(FBO::IsSupported() && GLEW_ARB_fragment_program && ProgramStringIsNative(GL_FRAGMENT_PROGRAM_ARB,"ARB/clouds.fp"))) {
+	if (!(FBO::IsSupported() && GLEW_ARB_fragment_program && ProgramStringIsNative(GL_FRAGMENT_PROGRAM_ARB, "ARB/clouds.fp"))) {
 		throw content_error("ADVSKY: missing OpenGL features!");
 	}
 
-	randMatrix=newmat3<int>(16,32,32);
-	rawClouds=newmat2<int>(CLOUD_SIZE,CLOUD_SIZE);
-	blendMatrix=newmat3<int>(CLOUD_DETAIL,32,32);
+	randMatrix = newmat3<int>(16, 32, 32);
+	rawClouds = newmat2<int>(CLOUD_SIZE, CLOUD_SIZE);
+	blendMatrix = newmat3<int>(CLOUD_DETAIL, 32, 32);
 
-	updatecounter=0;
+	memset(alphaTransform, 0, 1024);
+	memset(thicknessTransform, 0, 1024);
+	memset(covers, 0, 4 * 32 * sizeof(float));
 
-	domeheight = cos(PI/16)*1.01f;
-	domeWidth = sin(2*PI/32)*400*1.7f;
+	domeheight = cos(PI / 16) * 1.01f;
+	domeWidth = sin(2 * PI / 32) * 400 * 1.7f;
 
 	UpdateSkyDir();
 	InitSun();
 	UpdateSunDir();
 
-	for(int a=0;a<CLOUD_DETAIL;a++)
-		cloudDown[a]=false;
-	for(int a=0;a<5;a++)
-		cloudDetailDown[a]=false;
+	for (int a = 0; a < CLOUD_DETAIL; a++)
+		cloudDown[a] = false;
+	for (int a = 0; a < 5; a++)
+		cloudDetailDown[a] = false;
 
 	cloudDensity = mapInfo->atmosphere.cloudDensity;
 	cloudColor = mapInfo->atmosphere.cloudColor;
 	skyColor = mapInfo->atmosphere.skyColor;
 	sunColor = mapInfo->atmosphere.sunColor;
 	fogStart = mapInfo->atmosphere.fogStart;
-	if (fogStart>0.99f) globalRendering->drawFog = false;
+	if (fogStart > 0.99f) globalRendering->drawFog = false;
 
 	dynamicSky = true;
 	CreateClouds();
-	dynamicSky = configHandler->Get("DynamicSky", false);
-
-	oldCoverBaseX=-5;
+	dynamicSky = configHandler->GetBool("DynamicSky");
 
 	cloudFP = LoadFragmentProgram("ARB/clouds.fp");
 
@@ -211,7 +231,7 @@ void CAdvSky::Draw()
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 
-	SetFog();
+	ISky::SetupFog();
 }
 
 float3 CAdvSky::GetCoord(int x, int y)
@@ -296,7 +316,7 @@ void CAdvSky::CreateClouds()
 	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, CLOUD_SIZE, CLOUD_SIZE,0,GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	
+
 	fbo.reloadOnAltTab = true;
 	fbo.Bind();
 	fbo.AttachTexture(cdtex);
@@ -351,7 +371,7 @@ void CAdvSky::Update()
 	if (!dynamicSky)
 		return;
 
-	SCOPED_TIMER("Sky Update");
+	SCOPED_TIMER("AdvSky::Update");
 
 	CreateDetailTex();
 

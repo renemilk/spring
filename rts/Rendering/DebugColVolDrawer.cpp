@@ -1,10 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include "DebugColVolDrawer.h"
 
 #include "Game/Camera.h"
+#include "Game/GlobalUnsynced.h"
 #include "Map/ReadMap.h"
 #include "Rendering/UnitDrawer.h"
 #include "Rendering/GlobalRendering.h"
@@ -14,8 +14,6 @@
 #include "Sim/Features/Feature.h"
 #include "Sim/Misc/CollisionVolume.h"
 #include "Sim/Misc/QuadField.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
 
 static float3 defaultColVolColor(0.45f, 0.0f, 0.45f);
 
@@ -173,7 +171,7 @@ class CDebugColVolQuadDrawer : public CReadMap::IQuadDrawer {
 public:
 	void DrawQuad(int x, int y)
 	{
-		const CQuadField::Quad& q = qf->GetQuadAt(x,y);
+		const CQuadField::Quad& q = qf->GetQuadAt(x, y);
 
 		for (std::list<CFeature*>::const_iterator fi = q.features.begin(); fi != q.features.end(); ++fi) {
 			DrawFeatureColVol(*fi);
@@ -183,7 +181,7 @@ public:
 			DrawUnitColVol(*ui);
 		}
 
-		//todo: show colvols of synced projectiles
+		// TODO show colvols of synced projectiles
 	}
 };
 
@@ -193,11 +191,10 @@ namespace DebugColVolDrawer
 {
 	void Draw()
 	{
+#ifndef USE_GML // DebugColVolDrawer is not thread-safe
 		if (!globalRendering->drawdebug)
+#endif
 			return;
-
-		GML_RECMUTEX_LOCK(unit);
-		GML_RECMUTEX_LOCK(feat);
 
 		glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT);
 			glDisable(GL_LIGHTING);

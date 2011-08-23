@@ -1,21 +1,8 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifdef _MSC_VER
-#include "StdAfx.h"
-#endif
 #include "Lua/LuaLobby.h" // ugh, streflop namespace corruption...
-#ifndef _MSC_VER
-#include "StdAfx.h"
-#endif
 
-#include <stdio.h>
-#include <set>
-#include <cctype>
-#include <SDL_keysym.h>
-#include <SDL_mouse.h>
-#include <SDL_timer.h>
-
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "LuaUI.h"
 
@@ -23,7 +10,6 @@
 
 #include "Lua/LuaUnsyncedCtrl.h"
 #include "Lua/LuaCallInCheck.h"
-#include "Lua/LuaUtils.h"
 #include "Lua/LuaConstGL.h"
 #include "Lua/LuaConstCMD.h"
 #include "Lua/LuaConstCMDTYPE.h"
@@ -36,6 +22,7 @@
 #include "Lua/LuaWeaponDefs.h"
 #include "Lua/LuaScream.h"
 #include "Lua/LuaOpenGL.h"
+#include "Lua/LuaUtils.h"
 #include "Lua/LuaVFS.h"
 #include "Lua/LuaIO.h"
 #include "Lua/LuaZip.h"
@@ -43,6 +30,7 @@
 #include "Game/Camera/CameraController.h"
 #include "Game/Game.h"
 #include "Game/GameHelper.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/PlayerRoster.h"
 #include "Game/SelectedUnits.h"
 #include "CommandColors.h"
@@ -56,15 +44,23 @@
 #include "MouseHandler.h"
 #include "Map/ReadMap.h"
 #include "Rendering/IconHandler.h"
-#include "EventHandler.h"
-#include "LogOutput.h"
-#include "FileSystem/FileHandler.h"
-#include "FileSystem/VFSHandler.h"
-#include "ConfigHandler.h"
-#include "FileSystem/FileSystem.h"
-#include "Util.h"
+#include "System/EventHandler.h"
+#include "System/Log/ILog.h"
+#include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/VFSHandler.h"
+#include "System/Config/ConfigHandler.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/Util.h"
 
-using namespace std;
+#include <stdio.h>
+#include <set>
+#include <cctype>
+#include <SDL_keysym.h>
+#include <SDL_mouse.h>
+#include <SDL_timer.h>
+
+using std::max;
+
 
 CLuaUI* luaUI = NULL;
 
@@ -208,6 +204,8 @@ CLuaUI::CLuaUI()
 	UnsyncedUpdateCallIn(L, "WorldTooltip");
 	UnsyncedUpdateCallIn(L, "MapDrawCmd");
 
+	UpdateUnsyncedXCalls(L);
+
 	lua_settop(L, 0);
 
 	END_ITERATE_LUA_STATES();
@@ -239,10 +237,10 @@ string CLuaUI::LoadFile(const string& filename) const
 	CFileHandler lockFile("gamedata/LockLuaUI.txt", SPRING_VFS_MOD);
 	if (lockFile.FileExists()) {
 		if (!CLuaHandle::GetDevMode()) {
-			logOutput.Print("This game has locked LuaUI access");
+			LOG("This game has locked LuaUI access");
 			accessMode = SPRING_VFS_MOD;
 		} else {
-			logOutput.Print("Bypassing this game's LuaUI access lock");
+			LOG("Bypassing this game's LuaUI access lock");
 			accessMode = SPRING_VFS_RAW SPRING_VFS_MOD;
 		}
 	}
@@ -290,6 +288,9 @@ bool CLuaUI::UnsyncedUpdateCallIn(lua_State *L, const string& name)
 	} else {
 		eventHandler.RemoveEvent(this, name);
 	}
+
+	UpdateUnsyncedXCalls(L);
+
 	return true;
 }
 
@@ -374,23 +375,26 @@ static inline float fuzzRand(float fuzz)
 }
 
 
-void CLuaUI::ShockFront(float power, const float3& pos, float areaOfEffect)
+void CLuaUI::ShockFront(float power, const float3& pos, float areaOfEffect, float *distadj)
 {
 	if (!haveShockFront) {
 		return;
 	}
-	if (areaOfEffect < shockFrontMinArea) {
+	if (areaOfEffect < shockFrontMinArea && !distadj) {
 		return;
 	}
-
+#if defined(USE_GML) && GML_ENABLE_SIM
+	float shockFrontDistAdj = distadj ? *distadj : this->shockFrontDistAdj;
+#endif
 	float3 gap = (camera->pos - pos);
 	float dist = gap.Length() + shockFrontDistAdj;
 
 	power = power / (dist * dist);
-	if (power < shockFrontMinPower) {
+	if (power < shockFrontMinPower && !distadj) {
 		return;
 	}
 
+	LUA_UI_BATCH_PUSH(SHOCK_FRONT, power, pos, areaOfEffect, shockFrontDistAdj);
 	LUA_CALL_IN_CHECK(L);
 	lua_checkstack(L, 6);
 	static const LuaHashString cmdStr("ShockFront");
@@ -421,6 +425,41 @@ void CLuaUI::ShockFront(float power, const float3& pos, float areaOfEffect)
 	return;
 }
 
+
+void CLuaUI::ExecuteUIEventBatch() {
+	if(!UseEventBatch()) return;
+
+	std::vector<LuaUIEvent> lleb;
+	{
+		GML_STDMUTEX_LOCK(llbatch);
+
+		if(luaUIEventBatch.empty())
+			return;
+
+		luaUIEventBatch.swap(lleb);
+	}
+
+#if defined(USE_GML) && GML_ENABLE_SIM
+	SELECT_LUA_STATE();
+#endif
+	GML_DRCMUTEX_LOCK(lua); // ExecuteUIEventBatch
+
+	if(Threading::IsSimThread())
+		Threading::SetBatchThread(false);
+	for(std::vector<LuaUIEvent>::iterator i = lleb.begin(); i != lleb.end(); ++i) {
+		LuaUIEvent &e = *i;
+		switch(e.id) {
+			case SHOCK_FRONT:
+				ShockFront(e.flt1, e.pos1, e.flt2, &e.flt3);
+				break;
+			default:
+				LOG_L(L_ERROR, "%s: Invalid Event %d", __FUNCTION__, e.id);
+				break;
+		}
+	}
+	if(Threading::IsSimThread())
+		Threading::SetBatchThread(true);
+}
 
 /******************************************************************************/
 
@@ -461,6 +500,10 @@ bool CLuaUI::LayoutButtons(int& xButtons, int& yButtons,
 	buttonList.clear();
 	menuName = "";
 
+	GML_THRMUTEX_LOCK(unit, GML_DRAW); // LayoutButtons
+	GML_THRMUTEX_LOCK(feat, GML_DRAW); // LayoutButtons
+//	GML_THRMUTEX_LOCK(proj, GML_DRAW); // LayoutButtons
+
 	LUA_CALL_IN_CHECK(L);
 	lua_checkstack(L, 6);
 	const int top = lua_gettop(L);
@@ -494,20 +537,20 @@ bool CLuaUI::LayoutButtons(int& xButtons, int& yButtons,
 		return false; // no warnings
 	}
 	else if (args != 11) {
-		logOutput.Print("LayoutButtons() bad number of return values (%i)\n", args);
+		LOG_L(L_WARNING, "LayoutButtons() bad number of return values (%i)", args);
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!lua_isstring(L, 1)) {
-		logOutput.Print("LayoutButtons() bad menuName value\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad menuName value");
 		lua_settop(L, top);
 		return false;
 	}
 	menuName = string(lua_tostring(L, 1), lua_strlen(L, 1));
 
 	if (!lua_isnumber(L, 2) || !lua_isnumber(L, 3)) {
-		logOutput.Print("LayoutButtons() bad xButtons or yButtons values\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad xButtons or yButtons values");
 		lua_settop(L, top);
 		return false;
 	}
@@ -515,49 +558,49 @@ bool CLuaUI::LayoutButtons(int& xButtons, int& yButtons,
 	yButtons = lua_toint(L, 3);
 
 	if (!GetLuaIntList(L, 4, removeCmds)) {
-		logOutput.Print("LayoutButtons() bad removeCommands table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad removeCommands table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaCmdDescList(L, 5, customCmds)) {
-		logOutput.Print("LayoutButtons() bad customCommands table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad customCommands table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaIntList(L, 6, onlyTextureCmds)) {
-		logOutput.Print("LayoutButtons() bad onlyTexture table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad onlyTexture table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaReStringList(L, 7, reTextureCmds)) {
-		logOutput.Print("LayoutButtons() bad reTexture table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad reTexture table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaReStringList(L, 8, reNamedCmds)) {
-		logOutput.Print("LayoutButtons() bad reNamed table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad reNamed table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaReStringList(L, 9, reTooltipCmds)) {
-		logOutput.Print("LayoutButtons() bad reTooltip table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad reTooltip table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaReParamsList(L, 10, reParamsCmds)) {
-		logOutput.Print("LayoutButtons() bad reParams table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad reParams table");
 		lua_settop(L, top);
 		return false;
 	}
 
 	if (!GetLuaIntMap(L, 11, buttonList)) {
-		logOutput.Print("LayoutButtons() bad buttonList table\n");
+		LOG_L(L_WARNING, "LayoutButtons() bad buttonList table");
 		lua_settop(L, top);
 		return false;
 	}
@@ -576,29 +619,9 @@ bool CLuaUI::BuildCmdDescTable(lua_State* L,
 	const int cmdDescCount = (int)cmds.size();
 	for (int i = 0; i < cmdDescCount; i++) {
 		lua_pushnumber(L, i + CMD_INDEX_OFFSET);
-		lua_newtable(L); {
-			HSTR_PUSH_NUMBER(L, "id",       cmds[i].id);
-			HSTR_PUSH_NUMBER(L, "type",     cmds[i].type);
-			HSTR_PUSH_STRING(L, "name",     cmds[i].name);
-			HSTR_PUSH_STRING(L, "tooltip",  cmds[i].tooltip);
-			HSTR_PUSH_STRING(L, "action",   cmds[i].action);
-			HSTR_PUSH_STRING(L, "texture",  cmds[i].iconname);
-			HSTR_PUSH_BOOL(L,   "hidden",   cmds[i].hidden);
-			HSTR_PUSH_BOOL(L,   "disabled", cmds[i].disabled);
-			HSTR_PUSH_BOOL(L,"onlyTexture", cmds[i].onlyTexture);
-
-			HSTR_PUSH(L, "params");
-			lua_newtable(L);
-			for (unsigned int p = 0; p < cmds[i].params.size(); p++) {
-				lua_pushnumber(L, p + 1);
-				lua_pushstring(L, cmds[i].params[p].c_str());
-				lua_rawset(L, -3);
-			}
-			lua_rawset(L, -3);
-		}
+		LuaUtils::PushCommandDesc(L, cmds[i]);
 		lua_rawset(L, -3);
 	}
-	HSTR_PUSH_NUMBER(L, "n", cmdDescCount);
 	return true;
 }
 
@@ -739,14 +762,14 @@ bool CLuaUI::GetLuaCmdDescList(lua_State* L, int index,
 				} else if (key == "setext") {
 					cd.params.push_back(string("$se$") + value);
 				} else {
-					logOutput.Print("GetLuaCmdDescList() unknown key  (%s)\n", key.c_str());
+					LOG_L(L_WARNING, "GetLuaCmdDescList() unknown key (%s)", key.c_str());
 				}
 			}
 			else if (lua_israwstring(L, -2) && lua_istable(L, -1)) {
 				const string key = StringToLower(lua_tostring(L, -2));
 				if (key != "actions") {
-					logOutput.Print("GetLuaCmdDescList() non \"actions\" table: %s",
-					                key.c_str());
+					LOG_L(L_WARNING, "GetLuaCmdDescList() non \"actions\" table: %s",
+							key.c_str());
 					continue;
 				}
 				const int actionsTable = lua_gettop(L);
@@ -761,14 +784,14 @@ bool CLuaUI::GetLuaCmdDescList(lua_State* L, int index,
 				}
 			}
 			else {
-				logOutput.Print("GetLuaCmdDescList() bad entry\n");
+				LOG_L(L_WARNING, "GetLuaCmdDescList() bad entry");
 			}
 		}
 		cmdDescs.push_back(cd);
 	}
 
 	if (!lua_isnil(L, -1)) {
-		logOutput.Print("GetLuaCmdDescList() entry %i is not a table\n", paramIndex);
+		LOG_L(L_WARNING, "GetLuaCmdDescList() entry %i is not a table", paramIndex);
 		lua_pop(L, 1);
 		return false;
 	}
@@ -784,9 +807,16 @@ bool CLuaUI::GetLuaCmdDescList(lua_State* L, int index,
 // Custom Call-in
 //
 
-bool CLuaUI::HasUnsyncedXCall(const string& funcName)
+bool CLuaUI::HasUnsyncedXCall(lua_State* srcState, const string& funcName)
 {
 	SELECT_LUA_STATE();
+#if defined(USE_GML) && GML_ENABLE_SIM && (LUA_MT_OPT & LUA_MUTEX)
+	if (srcState != L && SingleState()) {
+		GML_STDMUTEX_LOCK(xcall); // HasUnsyncedXCall
+
+		return unsyncedXCalls.find(funcName) != unsyncedXCalls.end();
+	}
+#endif
 
 	lua_getglobal(L, funcName.c_str());
 	const bool haveFunc = lua_isfunction(L, -1);
@@ -800,11 +830,15 @@ void CLuaUI::ExecuteDelayedXCalls() {
 	{
 		GML_STDMUTEX_LOCK(xcall); // ExecuteDelayedXCalls
 
+		if(delayedXCall.empty())
+			return;
+
 		delayedXCall.swap(dxc);
 	}
 
-	GML_RECMUTEX_LOCK(unit); // ExecuteDelayedXCalls
-	GML_RECMUTEX_LOCK(feat); // ExecuteDelayedXCalls
+	GML_THRMUTEX_LOCK(unit, GML_DRAW); // ExecuteDelayedXCalls
+	GML_THRMUTEX_LOCK(feat, GML_DRAW); // ExecuteDelayedXCalls
+//	GML_THRMUTEX_LOCK(proj, GML_DRAW); // ExecuteDelayedXCalls
 
 	for(int i = 0; i < dxc.size(); ++i) {
 		DelayDataDump &ddp = dxc[i];
@@ -816,17 +850,15 @@ void CLuaUI::ExecuteDelayedXCalls() {
 			if(dd.type == LUA_TSTRING) {
 				const LuaHashString funcHash(*dd.data.str);
 				delete dd.data.str;
-				if (!funcHash.GetGlobalFunc(L))
-					return;
+				if (funcHash.GetGlobalFunc(L)) {
+					const int top = lua_gettop(L) - 1;
 
-				const int top = lua_gettop(L) - 1;
+					LuaUtils::Restore(ddp.com, L);
 
-				LuaUtils::Restore(ddp.com, L);
+					RunCallIn(funcHash, ddp.com.size(), LUA_MULTRET);
 
-				if (!RunCallIn(funcHash, ddp.com.size(), LUA_MULTRET))
-					return;
-
-				lua_settop(L, top);
+					lua_settop(L, top);
+				}
 			}
 		}
 	}
@@ -934,6 +966,34 @@ int CLuaUI::SetShockFrontFactors(lua_State* L)
 	return 0;
 }
 
+int CLuaUI::UpdateUnsyncedXCalls(lua_State* L)
+{
+#if defined(USE_GML) && GML_ENABLE_SIM && (LUA_MT_OPT & LUA_MUTEX)
+	if (!SingleState() || L != L_Sim)
+#endif
+		return 0;
+
+	GML_STDMUTEX_LOCK(xcall); // UpdateUnsyncedXCalls
+
+	unsyncedXCalls.clear();
+
+	for (lua_pushnil(L); lua_next(L, LUA_GLOBALSINDEX) != 0; lua_pop(L, 1)) {
+		const int ktype = lua_type(L, -2);
+		const int vtype = lua_type(L, -1);
+		if (ktype == LUA_TSTRING && vtype == LUA_TFUNCTION) {
+			size_t len = 0;
+			const char* data = lua_tolstring(L, -2, &len);
+			if (len > 0) {
+				std::string name;
+				name.resize(len);
+				memcpy(&name[0], data, len);
+				unsyncedXCalls.insert(name);
+			}
+		}
+	}
+
+	return 0;
+}
 
 /******************************************************************************/
 /******************************************************************************/

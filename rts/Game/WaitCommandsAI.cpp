@@ -1,31 +1,30 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include <SDL_timer.h>
 #include "WaitCommandsAI.h"
 #include "SelectedUnits.h"
-#include "Sim/Misc/TeamHandler.h"
 #include "GameHelper.h"
+#include "GlobalUnsynced.h"
+#include "UI/CommandColors.h"
+#include "UI/CursorIcons.h"
+#include "Rendering/LineDrawer.h"
 #include "Sim/Misc/QuadField.h"
 #include "Sim/Misc/GlobalConstants.h"
+#include "Sim/Misc/GlobalSynced.h"
+#include "Sim/Misc/TeamHandler.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitHandler.h"
 #include "Sim/Units/CommandAI/CommandQueue.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
 #include "Sim/Units/CommandAI/FactoryCAI.h"
-#include "Sim/Units/CommandAI/LineDrawer.h"
 #include "Sim/Units/UnitTypes/Factory.h"
-#include "Sim/Misc/GlobalSynced.h"
-#include "GlobalUnsynced.h"
-#include "Object.h"
-#include "UI/CommandColors.h"
-#include "UI/CursorIcons.h"
-#include "creg/STL_Map.h"
-#include "creg/STL_List.h"
-#include "creg/STL_Set.h"
-#include "Util.h"
+#include "System/Object.h"
+#include "System/Util.h"
+#include "System/creg/STL_Map.h"
+#include "System/creg/STL_List.h"
+#include "System/creg/STL_Set.h"
 #include <assert.h>
 
 CWaitCommandsAI waitCommandsAI;

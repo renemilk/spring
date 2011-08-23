@@ -1,8 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "creg/STL_List.h"
-#include "creg/STL_Set.h"
+#include "System/creg/STL_List.h"
+#include "System/creg/STL_Set.h"
 #include "PlasmaRepulser.h"
 #include "Lua/LuaRules.h"
 #include "Sim/Misc/GlobalSynced.h"
@@ -252,14 +251,17 @@ void CPlasmaRepulser::NewProjectile(CWeaponProjectile* p)
 	}
 
 	float3 dir;
-	if (p->targetPos!=ZeroVector) {
-		dir = p->targetPos-p->pos; // assume that it will travel roughly in the direction of the targetpos if it have one
+
+	if (p->targetPos != ZeroVector) {
+		dir = p->targetPos - p->pos; // assume that it will travel roughly in the direction of the targetpos if it have one
 	} else {
 		dir = p->speed;            // otherwise assume speed will hold constant
 	}
-	dir.y = 0;
-	dir.Normalize();
-	float3 dif = owner->pos-p->pos;
+
+	dir.y = 0.0f;
+	dir.SafeNormalize();
+
+	const float3 dif = owner->pos - p->pos;
 
 	if (weaponDef->exteriorShield && (dif.SqLength() < sqRadius)) {
 		return;

@@ -1,14 +1,14 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #include "SyncedGameCommands.h"
-#include "Game.h"
 #include "Action.h"
-#include "SyncedActionExecutor.h"
-#include "SelectedUnits.h"
-#include "PlayerHandler.h"
+#include "Game.h"
+#include "GlobalUnsynced.h"
 #include "InMapDraw.h"
+#include "PlayerHandler.h"
+#include "SelectedUnits.h"
+#include "SyncedActionExecutor.h"
 #ifdef _WIN32
 #  include "winerror.h" // TODO someone on windows (MinGW? VS?) please check if this is required
 #endif
@@ -23,8 +23,7 @@
 #include "Sim/Units/Unit.h"
 #include "UI/LuaUI.h"
 #include "System/FileSystem/SimpleParser.h"
-#include "System/LogOutput.h"
-#include "System/GlobalUnsynced.h"
+#include "System/Log/ILog.h"
 #include "System/Util.h"
 
 #include <string>
@@ -32,9 +31,7 @@
 #include <stdexcept>
 
 
-// This namespace is required to prevent conflicts with equally named classes
-// for unsynced ActionExecutor's.
-namespace syncedActionExecutors {
+namespace { // prevents linking problems in case of duplicate symbols
 
 class CheatActionExecutor : public ISyncedActionExecutor {
 public:
@@ -78,7 +75,7 @@ public:
 class GodModeActionExecutor : public ISyncedActionExecutor {
 public:
 	GodModeActionExecutor() : ISyncedActionExecutor("GodMode",
-			"Enabled/Disables god-mode, which allows all players"
+			"Enables/Disables god-mode, which allows all players"
 			" (even spectators) to control all units", true) {}
 
 	void Execute(const SyncedAction& action) const {
@@ -137,7 +134,7 @@ public:
 
 	void Execute(const SyncedAction& action) const {
 		std::stringstream argsStream(action.GetArgs());
-		logOutput.Print("Killing units: %s", action.GetArgs().c_str());
+		LOG("Killing units: %s", action.GetArgs().c_str());
 
 		unsigned int unitId;
 		do {
@@ -230,22 +227,22 @@ public:
 		if (gs->frameNum > 1) {
 			if ((action.GetArgs() == "reload") && (action.GetPlayerID() == 0)) {
 				if (!gs->cheatEnabled) {
-					logOutput.Print("Cheating required to reload synced scripts");
+					LOG_L(L_WARNING, "Cheating required to reload synced scripts");
 				} else {
 					CLuaRules::FreeHandler();
 					CLuaRules::LoadHandler();
 					if (luaRules) {
-						logOutput.Print("LuaRules reloaded");
+						LOG("LuaRules reloaded");
 					} else {
-						logOutput.Print("LuaRules reload failed");
+						LOG_L(L_ERROR, "LuaRules reload failed");
 					}
 				}
 			} else if ((action.GetArgs() == "disable") && (action.GetPlayerID() == 0)) {
 				if (!gs->cheatEnabled) {
-					logOutput.Print("Cheating required to disable synced scripts");
+					LOG_L(L_WARNING, "Cheating required to disable synced scripts");
 				} else {
 					CLuaRules::FreeHandler();
-					logOutput.Print("LuaRules disabled");
+					LOG("LuaRules disabled");
 				}
 			} else {
 				if (luaRules) luaRules->GotChatMsg(action.GetArgs(), action.GetPlayerID());
@@ -266,27 +263,27 @@ public:
 			if (gs->useLuaGaia) {
 				if ((action.GetArgs() == "reload") && (action.GetPlayerID() == 0)) {
 					if (!gs->cheatEnabled) {
-						logOutput.Print("Cheating required to reload synced scripts");
+						LOG_L(L_WARNING, "Cheating required to reload synced scripts");
 					} else {
 						CLuaGaia::FreeHandler();
 						CLuaGaia::LoadHandler();
 						if (luaGaia) {
-							logOutput.Print("LuaGaia reloaded");
+							LOG("LuaGaia reloaded");
 						} else {
-							logOutput.Print("LuaGaia reload failed");
+							LOG_L(L_ERROR, "LuaGaia reload failed");
 						}
 					}
 				} else if ((action.GetArgs() == "disable") && (action.GetPlayerID() == 0)) {
 					if (!gs->cheatEnabled) {
-						logOutput.Print("Cheating required to disable synced scripts");
+						LOG_L(L_WARNING, "Cheating required to disable synced scripts");
 					} else {
 						CLuaGaia::FreeHandler();
-						logOutput.Print("LuaGaia disabled");
+						LOG("LuaGaia disabled");
 					}
 				} else if (luaGaia) {
 					luaGaia->GotChatMsg(action.GetArgs(), action.GetPlayerID());
 				} else {
-					logOutput.Print("LuaGaia is not enabled");
+					LOG("LuaGaia disabled");
 				}
 			}
 		}
@@ -302,10 +299,10 @@ public:
 			" the rest of the participating hosts", true) {}
 
 	void Execute(const SyncedAction& action) const {
-		ASSERT_SYNCED_PRIMITIVE(gu->myPlayerNum * 123.0f);
-		ASSERT_SYNCED_PRIMITIVE(gu->myPlayerNum * 123);
-		ASSERT_SYNCED_PRIMITIVE((short)(gu->myPlayerNum * 123 + 123));
-		ASSERT_SYNCED_FLOAT3(float3(gu->myPlayerNum, gu->myPlayerNum, gu->myPlayerNum));
+		ASSERT_SYNCED(gu->myPlayerNum * 123.0f);
+		ASSERT_SYNCED(gu->myPlayerNum * 123);
+		ASSERT_SYNCED((short)(gu->myPlayerNum * 123 + 123));
+		ASSERT_SYNCED(float3(gu->myPlayerNum, gu->myPlayerNum, gu->myPlayerNum));
 
 		for (size_t i = uh->MaxUnits() - 1; i >= 0; --i) {
 			if (uh->units[i]) {
@@ -321,7 +318,7 @@ public:
 				break;
 			}
 		}
-		logOutput.Print("Desyncing in frame %d.", gs->frameNum);
+		LOG_L(L_ERROR, "Desyncing in frame %d.", gs->frameNum);
 	}
 };
 #endif // defined DEBUG
@@ -390,14 +387,12 @@ public:
 	}
 };
 
-} // namespace syncedActionExecutors
+} // namespace (unnamed)
 
 
 
 
 void SyncedGameCommands::AddDefaultActionExecutors() {
-
-	using namespace syncedActionExecutors;
 	
 	AddActionExecutor(new CheatActionExecutor());
 	AddActionExecutor(new NoHelpActionExecutor());
@@ -442,6 +437,7 @@ void SyncedGameCommands::DestroyInstance() {
 		singleton = NULL;
 		delete tmp;
 	} else {
-		throw std::logic_error("SyncedGameCommands singleton is already destroyed");
+		// this might happen during shutdown after an unclean init
+		LOG_L(L_WARNING, "SyncedGameCommands singleton was not initialized or is already destroyed");
 	}
 }

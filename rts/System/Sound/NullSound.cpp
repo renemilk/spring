@@ -3,8 +3,8 @@
 #include "NullSound.h"
 
 #include "SoundLog.h"
-#include "System/LogOutput.h"
 #include "System/float3.h"
+
 
 NullSound::NullSound() {
 }
@@ -12,7 +12,7 @@ NullSound::NullSound() {
 NullSound::~NullSound() {
 }
 
-bool NullSound::HasSoundItem(const std::string& name) {
+bool NullSound::HasSoundItem(const std::string& name) const {
 	return false;
 }
 
@@ -45,7 +45,7 @@ void NullSound::UpdateListener(const float3& campos, const float3& camdir, const
 }
 
 void NullSound::PrintDebugInfo() {
-	LogObject(LOG_SOUND) << "Null Sound System";
+	LOG("Null Sound System");
 }
 
 bool NullSound::LoadSoundDefs(const std::string& fileName) {

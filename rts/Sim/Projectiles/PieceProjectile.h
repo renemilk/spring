@@ -31,6 +31,7 @@ class CPieceProjectile: public CProjectile
 public:
 	CPieceProjectile(const float3& pos, const float3& speed, LocalModelPiece* piece, int flags, CUnit* owner, float radius);
 	virtual ~CPieceProjectile();
+	virtual void Detach();
 
 	void Update();
 	void Draw();
@@ -57,18 +58,18 @@ public:
 
 	float alphaThreshold;
 
-	float3 oldSmoke, oldSmokeDir;
+	float3 oldSmokePos;
+	float3 oldSmokeDir;
 	bool drawTrail;
-	CSmokeTrailProjectile* curCallback;
-	int* numCallback;
-	int age;
 
 	struct OldInfo {
 		float3 pos;
 		float size;
 	};
 	OldInfo* oldInfos[8];
+	CSmokeTrailProjectile* curCallback;
 
+	int age;
 	int colorTeam;
 };
 

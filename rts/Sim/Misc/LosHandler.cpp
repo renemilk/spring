@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include <list>
 #include <cstdlib>
@@ -13,7 +12,7 @@
 #include "Sim/Units/Unit.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Map/ReadMap.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/TimeProfiler.h"
 #include "System/creg/STL_Deque.h"
 #include "System/creg/STL_List.h"
@@ -73,9 +72,9 @@ CLosHandler* loshandler;
 
 
 CLosHandler::CLosHandler() :
-	losMap(teamHandler->ActiveAllyTeams()),
-	airLosMap(teamHandler->ActiveAllyTeams()),
-	//airAlgo(int2(airSizeX, airSizeY), -1e6f, 15, readmap->mipHeightmap[airMipLevel]),
+	losMaps(teamHandler->ActiveAllyTeams()),
+	airLosMaps(teamHandler->ActiveAllyTeams()),
+	// airAlgo(int2(airSizeX, airSizeY), -1e6f, 15, readmap->GetMIPHeightMapSynced(airMipLevel)),
 	losMipLevel(modInfo.losMipLevel),
 	airMipLevel(modInfo.airMipLevel),
 	losDiv(SQUARE_SIZE * (1 << losMipLevel)),
@@ -87,11 +86,11 @@ CLosHandler::CLosHandler() :
 	losSizeX(std::max(1, gs->mapx >> losMipLevel)),
 	losSizeY(std::max(1, gs->mapy >> losMipLevel)),
 	requireSonarUnderWater(modInfo.requireSonarUnderWater),
-	losAlgo(int2(losSizeX, losSizeY), -1e6f, 15, readmap->mipHeightmap[losMipLevel])
+	losAlgo(int2(losSizeX, losSizeY), -1e6f, 15, readmap->GetMIPHeightMapSynced(losMipLevel))
 {
 	for (int a = 0; a < teamHandler->ActiveAllyTeams(); ++a) {
-		losMap[a].SetSize(losSizeX, losSizeY);
-		airLosMap[a].SetSize(airSizeX, airSizeY);
+		losMaps[a].SetSize(losSizeX, losSizeY);
+		airLosMaps[a].SetSize(airSizeX, airSizeY);
 	}
 }
 
@@ -193,8 +192,8 @@ void CLosHandler::LosAdd(LosInstance* instance)
 
 	losAlgo.LosAdd(instance->basePos, instance->losSize, instance->baseHeight, instance->losSquares);
 
-	if (instance->losSize > 0) { losMap[instance->allyteam].AddMapSquares(instance->losSquares, 1); }
-	if (instance->airLosSize > 0) { airLosMap[instance->allyteam].AddMapArea(instance->baseAirPos, instance->airLosSize, 1); }
+	if (instance->losSize > 0) { losMaps[instance->allyteam].AddMapSquares(instance->losSquares, instance->allyteam, 1); }
+	if (instance->airLosSize > 0) { airLosMaps[instance->allyteam].AddMapArea(instance->baseAirPos, instance->allyteam, instance->airLosSize, 1); }
 }
 
 
@@ -214,7 +213,9 @@ void CLosHandler::FreeInstance(LosInstance* instance)
 		}
 
 		if (instance->hashNum >= LOSHANDLER_MAGIC_PRIME || instance->hashNum < 0) {
-			logOutput.Print("[LosHandler::FreeInstance][1] bad LOS-instance hash (%d)", instance->hashNum);
+			LOG_L(L_WARNING,
+					"[LosHandler::FreeInstance][1] bad LOS-instance hash (%d)",
+					instance->hashNum);
 		}
 
 		if (toBeDeleted.size() > 500) {
@@ -222,7 +223,9 @@ void CLosHandler::FreeInstance(LosInstance* instance)
 			toBeDeleted.pop_front();
 
 			if (i->hashNum >= LOSHANDLER_MAGIC_PRIME || i->hashNum < 0) {
-				logOutput.Print("[LosHandler::FreeInstance][2] bad LOS-instance hash (%d)", i->hashNum);
+				LOG_L(L_WARNING,
+						"[LosHandler::FreeInstance][2] bad LOS-instance hash (%d)",
+						i->hashNum);
 				return;
 			}
 
@@ -266,8 +269,8 @@ void CLosHandler::AllocInstance(LosInstance* instance)
 
 void CLosHandler::CleanupInstance(LosInstance* instance)
 {
-	if (instance->losSize > 0) { losMap[instance->allyteam].AddMapSquares(instance->losSquares, -1); }
-	if (instance->airLosSize > 0) { airLosMap[instance->allyteam].AddMapArea(instance->baseAirPos, instance->airLosSize, -1); }
+	if (instance->losSize > 0) { losMaps[instance->allyteam].AddMapSquares(instance->losSquares, instance->allyteam, -1); }
+	if (instance->airLosSize > 0) { airLosMaps[instance->allyteam].AddMapArea(instance->baseAirPos, instance->allyteam, instance->airLosSize, -1); }
 }
 
 

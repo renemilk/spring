@@ -1,9 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #if defined BUILDING_AI
-#include "Util.h"
+#include "System/Util.h"
 #else // defined BUILDING_AI
-#include "LogOutput.h"
+#include "System/Log/ILog.h"
 #endif // defined BUILDING_AI
 
 // OS dependent stuff
@@ -70,7 +70,7 @@ void SharedLib::reportError(const char* errorMsg, const char* fileName, int line
 		// DO NOTHING
 	#endif // defined EXTERNAL_LOGGER
 #else // defined BUILDING_AI
-	logOutput.Print("%s:%d: %s: %s", fileName, lineNumber, function, errorMsg);
+	LOG_L(L_ERROR, "%s:%d: %s: %s", fileName, lineNumber, function, errorMsg);
 #endif // defined BUILDING_AI
 }
 

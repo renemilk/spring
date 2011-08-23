@@ -1,7 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef _SAIINTERFACELIBRARY_H
-#define _SAIINTERFACELIBRARY_H
+#ifndef S_AI_INTERFACE_LIBRARY_H
+#define S_AI_INTERFACE_LIBRARY_H
 
 /*
  * All this is not needed when building an AI,
@@ -73,6 +73,15 @@ extern "C" {
  */
 #define AI_INTERFACE_PROPERTY_ENGINE_VERSION         "engineVersion"
 
+/**
+ * [bool]
+ * Whether the AI Interface suports dynamic (at runtime) lookup of available
+ * Skirmish AIs through the list* functions, in addition to the ones defined
+ * through AIInfo.lua files.
+ * example: "0", "1", "false", "true"
+ */
+#define AI_INTERFACE_PROPERTY_SUPPORTS_LOOKUP    "supportsLookup"
+
 /*
  * Everything following is (code wise) only interesting for the engine,
  * not for AI Interfaces.
@@ -126,10 +135,6 @@ struct SAIInterfaceLibrary {
 	 */
 	int (CALLING_CONV *initStatic)(int interfaceId,
 			const struct SAIInterfaceCallback* const);
-
-//			unsigned int infoSize,
-//			const char** infoKeys, const char** infoValues,
-//			const struct SStaticGlobalData* staticGlobalData);
 
 	/**
 	 * This function is called right right before the library is unloaded.
@@ -186,6 +191,74 @@ struct SAIInterfaceLibrary {
 	 */
 	int (CALLING_CONV *unloadAllSkirmishAILibraries)();
 
+	/**
+	 * Dynamic Skirmish AI library lookup system entry method.
+	 * This system works as an alternative/addition to AIInfo.lua and
+	 * AIOptions.lua files.
+	 *
+	 * [optional]
+	 * An AI Interface not exporting this function is still valid.
+	 *
+	 * @see AI_INTERFACE_PROPERTY_SUPPORTS_LOOKUP
+	 * @see listSkirmishAILibraryInfos
+	 * @see listSkirmishAILibraryOptions
+	 * @return the number of Skirmish AI libraries available through this
+	 *   interface through the dynamic lookup system
+	 */
+	int (CALLING_CONV *listSkirmishAILibraries)(int interfaceId);
+
+	/**
+	 * Returns the number of info key-value pairs for a certain Skirmish AI
+	 * library.
+	 *
+	 * [optional]
+	 * An AI Interface not exporting this function is still valid.
+	 *
+	 * @see listSkirmishAILibraries
+	 * @see listSkirmishAILibraryInfoKey
+	 * @see listSkirmishAILibraryInfoValue
+	 * @return the number of info key-value pairs for a certain Skirmish AI
+	 *   library.
+	 */
+	int (CALLING_CONV *listSkirmishAILibraryInfos)(int interfaceId,
+			int aiIndex);
+	/**
+	 * Returns the key of an info item for a certain Skirmish AI library.
+	 *
+	 * [optional]
+	 * An AI Interface not exporting this function is still valid.
+	 *
+	 * @see listSkirmishAILibraryInfos
+	 * @see listSkirmishAILibraryInfoValue
+	 * @return the key of an info item for a certain Skirmish AI library.
+	 */
+	const char* (CALLING_CONV *listSkirmishAILibraryInfoKey)(int interfaceId,
+			int aiIndex, int infoIndex);
+	/**
+	 * Returns the value of an info item for a certain Skirmish AI library.
+	 *
+	 * [optional]
+	 * An AI Interface not exporting this function is still valid.
+	 *
+	 * @see listSkirmishAILibraryInfos
+	 * @see listSkirmishAILibraryInfoKey
+	 * @return the value of an info item for a certain Skirmish AI library.
+	 */
+	const char* (CALLING_CONV *listSkirmishAILibraryInfoValue)(int interfaceId,
+			int aiIndex, int infoIndex);
+
+	/**
+	 * Returns a string consisting of Lua code, that returns an options table.
+	 *
+	 * [optional]
+	 * An AI Interface not exporting this function is still valid.
+	 *
+	 * @see listSkirmishAILibraries
+	 * @return NULL for no options, otherwise
+	 *   a string consisting of Lua code that returns an options table
+	 */
+	const char* (CALLING_CONV *listSkirmishAILibraryOptions)(int interfaceId,
+			int aiIndex);
 };
 
 #endif // !defined BUILDING_AI
@@ -195,4 +268,4 @@ struct SAIInterfaceLibrary {
 #endif
 
 #endif // !defined BUILDING_SKIRMISH_AI
-#endif // _SAIINTERFACELIBRARY_H
+#endif // S_AI_INTERFACE_LIBRARY_H

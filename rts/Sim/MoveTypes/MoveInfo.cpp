@@ -1,23 +1,22 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <boost/lexical_cast.hpp>
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "MoveInfo.h"
 #include "Game/Game.h"
 #include "Lua/LuaParser.h"
-#include "LogOutput.h"
 #include "Map/ReadMap.h"
 #include "Map/MapInfo.h"
 #include "MoveMath/MoveMath.h"
 #include "MoveMath/GroundMoveMath.h"
 #include "MoveMath/HoverMoveMath.h"
 #include "MoveMath/ShipMoveMath.h"
-#include "creg/STL_Deque.h"
-#include "creg/STL_Map.h"
-#include "Exceptions.h"
-#include "System/FileSystem/CRC.h"
+#include "System/creg/STL_Deque.h"
+#include "System/creg/STL_Map.h"
+#include "System/Exceptions.h"
+#include "System/CRC.h"
+#include "System/myMath.h"
 #include "System/Util.h"
 
 CR_BIND(MoveData, (0));
@@ -66,7 +65,10 @@ CMoveInfo* moveinfo;
 
 static float DegreesToMaxSlope(float degrees)
 {
-	return (1.0f - cos(degrees * 1.5f * PI / 180.0f));
+	const float deg = Clamp(degrees, 0.0f, 60.0f) * 1.5f;
+	const float rad = deg * (PI / 180.0f);
+
+	return (1.0f - cos(rad));
 }
 
 

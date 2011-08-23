@@ -1,15 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
-#include <set>
-#include <list>
-#include <cctype>
-#include <limits.h>
+#include "System/mmgr.h"
+
+#include <cmath>
 #include <boost/regex.hpp>
-using namespace std;
-
-#include "mmgr.h"
 
 #include "LuaVFS.h"
 
@@ -19,12 +14,18 @@ using namespace std;
 #include "LuaHashString.h"
 #include "LuaIO.h"
 #include "LuaUtils.h"
-#include "LogOutput.h"
-#include "FileSystem/FileHandler.h"
-#include <FileSystem/ArchiveScanner.h>
-#include "FileSystem/VFSHandler.h"
-#include "FileSystem/FileSystem.h"
-#include "Util.h"
+#include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/ArchiveScanner.h"
+#include "System/FileSystem/VFSHandler.h"
+#include "System/FileSystem/FileSystem.h"
+#include "System/Util.h"
+
+#include <set>
+#include <list>
+#include <cctype>
+#include <limits.h>
+
+using std::min;
 
 
 /******************************************************************************/
@@ -275,8 +276,10 @@ int LuaVFS::FileExists(lua_State* L, bool synced)
 
 	const string modes = GetModes(L, 2, synced);
 
-	CFileHandler fh(filename, modes);
-	lua_pushboolean(L, fh.FileExists());
+	//CFileHandler fh(filename, modes);
+	//lua_pushboolean(L, fh.FileExists());
+
+	lua_pushboolean(L, CFileHandler::FileExists(filename, modes));
 	return 1;
 }
 
@@ -576,9 +579,6 @@ int UnpackType(lua_State* L)
 			lua_pushnumber(L, value);
 			lua_rawseti(L, -2, (i + 1));
 		}
-		lua_pushstring(L, "n");
-		lua_pushnumber(L, tableCount);
-		lua_rawset(L, -3);
 		return 1;
 	}
 

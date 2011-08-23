@@ -10,8 +10,9 @@
 #include "Sim/Objects/WorldObject.h"
 #include "Sim/Units/Unit.h"
 
+#include <climits>
+
 extern boost::recursive_mutex soundMutex;
-boost::recursive_mutex chanMutex;
 
 const size_t AudioChannel::MAX_STREAM_QUEUESIZE = 10;
 
@@ -81,16 +82,35 @@ void AudioChannel::FindSourceAndPlay(size_t id, const float3& pos, const float3&
 
 	if (pos.distance(sound->GetListenerPos()) > sndItem->MaxDistance())
 	{
-		if (!relative)
+		if (!relative) {
 			return;
-		else
-			LogObject(LOG_SOUND) << "CSound::PlaySample: maxdist ignored for relative payback: " << sndItem->Name();
+		} else {
+			LOG("CSound::PlaySample: maxdist ignored for relative playback: %s",
+					sndItem->Name().c_str());
+		}
 	}
 
 	if (emmitsThisFrame >= emmitsPerFrame)
 		return;
 	emmitsThisFrame++;
-	
+
+	if (cur_sources.size() >= maxConcurrentSources) {
+		CSoundSource* src = NULL;
+		int prio = INT_MAX;
+		for (std::map<CSoundSource*, bool>::iterator it = cur_sources.begin(); it != cur_sources.end(); ++it) {
+			if (prio < it->first->GetCurrentPriority()) {
+				src  = it->first;
+				prio = it->first->GetCurrentPriority();
+			}
+		}
+
+		if (src && prio <= sndItem->GetPriority()) {
+			src->Stop();
+		} else {
+			return;
+		}
+	}
+
 	CSoundSource* sndSource = sound->GetNextBestSource();
 	if (!sndSource)
 		return;
@@ -160,8 +180,8 @@ void AudioChannel::StreamPlay(const std::string& filepath, float volume, bool en
 		curStreamSrc = newStreamSrc;
 
 	if (curStreamSrc) {
+		cur_sources[curStreamSrc] = true; //! This one first, PlayStream may invoke Stop immediately thus setting curStreamSrc to NULL
 		curStreamSrc->PlayStream(this, filepath, volume);
-		cur_sources[curStreamSrc] = true;
 	}
 }
 

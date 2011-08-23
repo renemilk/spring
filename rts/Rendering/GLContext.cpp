@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 
 #ifdef free
 #undef free
@@ -11,7 +10,8 @@
 #include <list>
 #include <cstddef> // for NULL
 
-using namespace std;
+using std::list;
+
 
 struct HookSet {
 	HookSet()

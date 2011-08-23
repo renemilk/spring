@@ -1,12 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include <string>
-#include <vector>
-#include <SDL_keysym.h>
-#include <cstdio>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "GameInfo.h"
 #include "MouseHandler.h"
@@ -22,8 +17,13 @@
 #include "System/FileSystem/FileSystem.h"
 #include "System/Util.h"
 
+#include <string>
+#include <vector>
+#include <SDL_keysym.h>
+#include <cstdio>
 
-using namespace std;
+using std::string;
+using std::vector;
 
 
 CGameInfo* CGameInfo::instance = NULL;
@@ -166,7 +166,7 @@ void CGameInfo::Draw()
 
 	if (gameSetup && gameSetup->hostDemo) {
 		labels.push_back("Playback:");
-		values.push_back(filesystem.GetBasename(gameSetup->demoName));
+		values.push_back(FileSystem::GetBasename(gameSetup->demoName));
 	}
 
 	labels.push_back("Game Version:");

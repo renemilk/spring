@@ -5,30 +5,33 @@
 #include "Interface/aidefines.h"
 #include "Interface/SSkirmishAILibrary.h"
 #include "SkirmishAIKey.h"
-#include "Util.h"
-#include "Info.h"
-#include "Option.h"
+#include "System/Util.h"
+#include "System/Info.h"
+#include "System/Option.h"
+#include "System/Log/ILog.h"
 
-#include "FileSystem/VFSModes.h"
+#include "System/FileSystem/VFSModes.h"
 
 
 static const char* BAD_CHARS = "\t _#";
 static const std::string DEFAULT_VALUE = "";
 
 CSkirmishAILibraryInfo::CSkirmishAILibraryInfo(
-		const CSkirmishAILibraryInfo& aiInfo) :
-		info_keyLower_key(aiInfo.info_keyLower_key),
-		info_key_value(aiInfo.info_key_value),
-		info_key_description(aiInfo.info_key_description),
-		options(aiInfo.options)
-		{}
+		const CSkirmishAILibraryInfo& aiInfo)
+	: info_keys(aiInfo.info_keys)
+	, info_keyLower_key(aiInfo.info_keyLower_key)
+	, info_key_value(aiInfo.info_key_value)
+	, info_key_description(aiInfo.info_key_description)
+	, options(aiInfo.options)
+{
+}
 
 CSkirmishAILibraryInfo::CSkirmishAILibraryInfo(
 		const std::string& aiInfoFile,
-		const std::string& aiOptionFile) {
-
+		const std::string& aiOptionFile)
+{
 	std::vector<InfoItem> tmpInfo;
-	parseInfo(tmpInfo, aiInfoFile);
+	info_parseInfo(tmpInfo, aiInfoFile);
 	std::vector<InfoItem>::iterator ii;
 	for (ii = tmpInfo.begin(); ii != tmpInfo.end(); ++ii) {
 		// TODO remove this, once we support non-string value types for Skirmish AI info
@@ -37,7 +40,21 @@ CSkirmishAILibraryInfo::CSkirmishAILibraryInfo(
 	}
 
 	if (!aiOptionFile.empty()) {
-		parseOptions(options, aiOptionFile);
+		option_parseOptions(options, aiOptionFile);
+	}
+}
+
+CSkirmishAILibraryInfo::CSkirmishAILibraryInfo(
+		const std::map<std::string, std::string>& aiInfo,
+		const std::string& aiOptionLua)
+{
+	std::map<std::string, std::string>::const_iterator ii;
+	for (ii = aiInfo.begin(); ii != aiInfo.end(); ++ii) {
+		SetInfo(ii->first, ii->second);
+	}
+
+	if (!aiOptionLua.empty()) {
+		option_parseOptionsLuaString(options, aiOptionLua);
 	}
 }
 
@@ -107,14 +124,8 @@ bool CSkirmishAILibraryInfo::IsLuaAI() const {
 	bool isLua = false;
 
 	const std::string& isLuaStr = GetInfo("isLuaAI");
-	if ((isLuaStr == "yes") ||
-		(isLuaStr == "Yes") ||
-		(isLuaStr == "YES") ||
-		(isLuaStr == "1") ||
-		(isLuaStr == "true") ||
-		(isLuaStr == "True") ||
-		(isLuaStr == "TRUE")) {
-		isLua = true;
+	if (isLuaStr != DEFAULT_VALUE) {
+		isLua = StringToBool(isLuaStr);
 	}
 
 	return isLua;
@@ -141,7 +152,8 @@ const std::string& CSkirmishAILibraryInfo::GetInfo(const std::string& key) const
 	}
 
 	if (!found) {
-		logOutput.Print("Skirmish AI property '%s' could not be found.", key.c_str());
+		LOG_L(L_WARNING, "Skirmish AI property '%s' could not be found.",
+				key.c_str());
 		return DEFAULT_VALUE;
 	} else {
 		return strPair->second;
@@ -193,7 +205,7 @@ bool CSkirmishAILibraryInfo::SetInfo(const std::string& key,
 	std::string keyLower = StringToLower(key);
 	if (keyLower == snKey || keyLower == vKey) {
 		if (value.find_first_of(BAD_CHARS) != std::string::npos) {
-		logOutput.Print("Error, Skirmish AI property (%s or %s)\n"
+		LOG_L(L_WARNING, "Skirmish AI property (%s or %s)\n"
 				"contains illegal characters (%s).",
 				SKIRMISH_AI_PROPERTY_SHORT_NAME, SKIRMISH_AI_PROPERTY_VERSION,
 				BAD_CHARS);

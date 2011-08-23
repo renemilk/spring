@@ -1,11 +1,10 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
 #include <string>
 #include <vector>
 #include <algorithm>
 
-#include "mmgr.h"
+#include "System/mmgr.h"
 
 #include "Action.h"
 #include "System/FileSystem/SimpleParser.h"

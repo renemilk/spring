@@ -1,21 +1,20 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifdef _MSC_VER
-#include "StdAfx.h"
-#endif
 #include "LobbyConnection.h"
+#include "System/Platform/Win/win32.h"
 
 #include <boost/bind.hpp>
 
 #include "UpdaterWindow.h"
-#include "ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #include "Game/GameVersion.h"
 #include "aGui/Gui.h"
 
+CONFIG(std::string, LobbyServer).defaultValue("lobby.springrts.com");
 
 LobbyConnection::LobbyConnection() : upwin(NULL)
 {
-	Connect(configHandler->GetString("LobbyServer", "taspringmaster.clan-sy.com"), 8200);
+	Connect(configHandler->GetString("LobbyServer"), 8200);
 }
 
 LobbyConnection::~LobbyConnection()

@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
-#include "mmgr.h"
+#include "System/mmgr.h"
 #include <cstring>
 #include <vector>
 
@@ -13,13 +12,12 @@
 #include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/ShadowHandler.h"
-#include "Rendering/Env/BaseSky.h"
+#include "Rendering/Env/ISky.h"
 #include "Rendering/GL/FBO.h"
 #include "Rendering/GL/VertexArray.h"
-#include "Rendering/Shaders/Shader.hpp"
+#include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
-#include "System/GlobalUnsynced.h"
-#include "System/LogOutput.h"
+#include "System/Log/ILog.h"
 #include "System/Exceptions.h"
 
 using std::max;
@@ -35,7 +33,7 @@ CAdvTreeGenerator::CAdvTreeGenerator()
 {
 	LuaParser resourcesParser("gamedata/resources.lua", SPRING_VFS_MOD_BASE, SPRING_VFS_ZIP);
 	if (!resourcesParser.Execute()) {
-		logOutput.Print(resourcesParser.GetErrorLog());
+		LOG_L(L_ERROR, "%s", resourcesParser.GetErrorLog().c_str());
 	}
 
 	const LuaTable treesTable = resourcesParser.GetRoot().SubTable("graphics").SubTable("trees");

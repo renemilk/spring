@@ -1,19 +1,19 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "StdAfx.h"
+#include "System/Platform/Win/win32.h"
 #include "List.h"
 
 #include <SDL_keysym.h>
 #include <SDL_mouse.h>
 #include <SDL_timer.h>
 
+#include "Rendering/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/myGL.h"
+#include "Game/GlobalUnsynced.h"
 #include "Game/UI/MouseHandler.h"
 #include "Gui.h"
-#include "Rendering/glFont.h"
-#include "Util.h"
-#include "GlobalUnsynced.h"
+#include "System/Util.h"
 
 namespace agui
 {
@@ -57,7 +57,7 @@ void List::RemoveAllItems() {
 }
 
 void List::RefreshQuery() {
-	if(query != "") {
+	if (query != "") {
 		int t = topIndex;
 		std::string q = query;
 		Filter(true);
@@ -363,41 +363,33 @@ bool List::HandleEventSelf(const SDL_Event& ev)
 	return false;
 }
 
+
+
 void List::UpOne()
 {
-	place--;
-	if(place<0)
-		place=0;
+	place = std::max(0, place - 1);
 }
 
 void List::DownOne()
 {
-	place++;
-	if(place>=(int)filteredItems->size())
-		place=filteredItems->size()-1;
-	if(place<0)
-		place=0;
+	place = std::max(0, std::min(place + 1, int(filteredItems->size()) - 1));
 }
 
 void List::UpPage()
 {
-	place -= NumDisplay();
-	if(place<0)
-		place=0;
+	place = std::max(0, place - NumDisplay());
 }
 
 void List::DownPage()
 {
-	place += NumDisplay();
-	if(place>=(int)filteredItems->size())
-		place=filteredItems->size()-1;
-	if(place<0)
-		place=0;
+	place = std::max(0, std::min(place + NumDisplay(), int(filteredItems->size()) - 1));
 }
+
+
 
 std::string List::GetCurrentItem() const
 {
-	if (!filteredItems->empty()) {
+	if (place < filteredItems->size()) {
 		return ((*filteredItems)[place]);
 	}
 	return "";
@@ -463,28 +455,31 @@ bool List::KeyPressed(unsigned short k, bool isRepeat)
 
 bool List::Filter(bool reset)
 {
-	std::string current = (*filteredItems)[place];
+	std::string current = GetCurrentItem();
 	std::vector<std::string>* destination = filteredItems == &temp1 ? &temp2 : &temp1;
 	destination->clear();
-	if (reset) filteredItems = &items; // reset filter
+
+	if (reset)
+		filteredItems = &items; // reset filter
+
 	for (std::vector<std::string>::const_iterator it = filteredItems->begin(); it != filteredItems->end(); ++it) {
 		std::string lcitem(*it, 0, query.length());
 		StringToLowerInPlace(lcitem);
+
 		if (lcitem == query) {
 			if (*it == current)
 				place = destination->size();
+
 			destination->push_back(*it);
 		}
 	}
+
 	if (destination->empty()) {
 		query = query.substr(0, query.length() - 1);
 		return false;
 	} else {
 		filteredItems = destination;
-		if(place >= (int)filteredItems->size())
-			place = filteredItems->size() - 1;
-		if(place < 0)
-			place = 0;
+		place = std::max(0, std::min(place, int(filteredItems->size()) - 1));
 		topIndex = 0;
 		return true;
 	}
