@@ -16,6 +16,7 @@
 
 #include "System/Platform/Win/win32.h"
 #include <sstream>
+#include <cassert>
 #include <string.h>
 
 #include "System/Log/ILog.h"
@@ -44,6 +45,12 @@ DataDir::DataDir(const std::string& path)
 DataDirLocater::DataDirLocater()
 	: writeDir(NULL)
 {
+}
+
+const std::vector<DataDir>& DataDirLocater::GetDataDirs() const {
+
+	assert(!dataDirs.empty());
+	return dataDirs;
 }
 
 std::string DataDirLocater::SubstEnvVars(const std::string& in) const
@@ -126,7 +133,7 @@ bool DataDirLocater::DeterminePermissions(DataDir* dataDir)
 	if (dataDir->path.find("..") != std::string::npos)
 #endif
 	{
-		throw content_error(std::string("Error: datadir specified with relative path: \"") + dataDir->path + "\""); // FIXME remove "Error: " prefix
+		throw content_error(std::string("a datadir may not be specified with a relative path: \"") + dataDir->path + "\"");
 	}
 	// Figure out whether we have read/write permissions
 	// First check read access, if we got that, check write access too
@@ -428,6 +435,7 @@ std::string DataDirLocater::GetWriteDirPath() const
 
 std::vector<std::string> DataDirLocater::GetDataDirPaths() const
 {
+	assert(!dataDirs.empty());
 	std::vector<std::string> dataDirPaths;
 
 	const std::vector<DataDir>& datadirs = GetDataDirs();

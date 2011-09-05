@@ -264,24 +264,17 @@ class CLuaHandle : public CEventClient
 			return 0;
 		}
 
-		struct DelayData {
-			int type;
-			union {
-				std::string *str;
-				float num;
-				bool bol;
-			} data;
-		};
 		struct DelayDataDump {
-			std::vector<DelayData> dd;
-			std::vector<LuaUtils::DataDump> com;
+			std::vector<LuaUtils::ShallowDataDump> data;
+			std::vector<LuaUtils::DataDump> dump;
+			bool xcall;
 		};
 
-		void ExecuteRecvFromSynced();
-		virtual void RecvFromSynced(int args);
+		bool ExecuteCallsFromSynced(bool forced = true); // returns true if any calls were processed, false otherwise
+		virtual void RecvFromSynced(lua_State *srcState, int args);
 		void RecvFromSim(int args);
 		void DelayRecvFromSynced(lua_State* srcState, int args);
-		std::vector<DelayDataDump> delayedRecvFromSynced;
+		std::vector<DelayDataDump> delayedCallsFromSynced;
 		static int SendToUnsynced(lua_State* L);
 
 		void UpdateThreading();
@@ -304,8 +297,11 @@ class CLuaHandle : public CEventClient
 		static inline bool UseDualStates() { return (LUA_MT_OPT & LUA_STATE) && useDualStates; } // Is Lua handle splitting enabled (globally)?
 		bool useEventBatch;
 		inline bool UseEventBatch() const { return (LUA_MT_OPT & LUA_BATCH) && useEventBatch; } // Use event batch to forward "synced" luaui events into draw thread?
-		bool purgeRecvFromSyncedBatch;
-		inline bool PurgeRecvFromSyncedBatch() const { return (LUA_MT_OPT & LUA_STATE) && purgeRecvFromSyncedBatch; } // Automatically clean deleted objects from the SendToUnsynced batch
+		bool purgeCallsFromSyncedBatch;
+		inline bool PurgeCallsFromSyncedBatch() const { return (LUA_MT_OPT & LUA_STATE) && purgeCallsFromSyncedBatch; } // Automatically clean deleted objects/IDs from the SendToUnsynced/XCall batch
+
+		inline lua_State *ForceUnsyncedState() { lua_State *L_Prev = L_Sim; if (!SingleState() && Threading::IsSimThread()) L_Sim = L_Draw; return L_Prev; }
+		inline void RestoreState(lua_State *L_Prev) { if (!SingleState() && Threading::IsSimThread()) L_Sim = L_Prev; }
 
 		inline lua_State *GetActiveState() {
 			return (SingleState() || Threading::IsSimThread()) ? L_Sim : L_Draw;

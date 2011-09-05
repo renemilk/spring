@@ -4587,11 +4587,14 @@ int LuaSyncedRead::Pos2BuildPos(lua_State* L)
 	if (ud == NULL) {
 		return 0;
 	}
+
 	const float3 pos(luaL_checkfloat(L, 2),
 	                 luaL_checkfloat(L, 3),
 	                 luaL_checkfloat(L, 4));
+	const int facing = luaL_optint(L, 5, FACING_SOUTH);
 
-	const float3 buildPos = helper->Pos2BuildPos(pos, ud, CLuaHandle::GetSynced(L));
+	const BuildInfo buildInfo(ud, pos, facing);
+	const float3 buildPos = helper->Pos2BuildPos(buildInfo, CLuaHandle::GetSynced(L));
 
 	lua_pushnumber(L, buildPos.x);
 	lua_pushnumber(L, buildPos.y);
