@@ -18,7 +18,7 @@ fi
 
 #install
 cd ${BUILDDIR}
-make install-spring-headless DESTDIR=${TESTDIR} $@
+make install DESTDIR=${TESTDIR}
 
 cd ${SOURCEDIR}
 #fetch required files
