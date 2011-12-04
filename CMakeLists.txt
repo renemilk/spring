@@ -1,6 +1,14 @@
  
 project(Spring)
 
+SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a" )
+function (FIND_PACKAGE_EXTRA ARGV )
+	SET(CMAKE_FIND_LIBRARY_SUFFIXES ".so" )
+	FIND_PACKAGE( ${ARGV} )
+	SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a" )
+endfunction (FIND_PACKAGE_EXTRA )
+SET(CMAKE_CXX_FLAGS "-fPIC" )
+
 # CMake 2.4:
 # - lacks some cross-compiling features and fails on windows
 # CMake 2.6:
