@@ -4,6 +4,7 @@
 #define GUI_H
 
 #include <list>
+#include "System/signalslib.h"
 #include <boost/signals/connection.hpp>
 
 union SDL_Event;
@@ -29,7 +30,7 @@ public:
 
 private:
 	bool HandleEvent(const SDL_Event& ev);
-	boost::signals::scoped_connection inputCon;
+    boost::signalslib::scoped_connection inputCon;
 
 	struct GuiItem
 	{

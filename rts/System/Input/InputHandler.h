@@ -3,6 +3,7 @@
 #ifndef INPUT_HANDLER_H
 #define INPUT_HANDLER_H
 
+#include "System/signalslib.h"
 #include <boost/signals.hpp>
 #include <SDL_events.h>
 
@@ -18,7 +19,7 @@ public:
 
 	void PushEvent(const SDL_Event& ev);
 
-	boost::signals::connection AddHandler(SignalType::slot_function_type);
+    boost::signalslib::connection AddHandler(SignalType::slot_function_type);
 
 private:
 	SignalType sig;
