@@ -1,5 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
-
+#include "System/SpringApp.h"
 #include "Rendering/GL/myGL.h"
 
 #include <stdlib.h>
@@ -140,7 +140,6 @@
 #include "System/Sync/FPUCheck.h"
 #include "System/GlobalConfig.h"
 #include "System/NetProtocol.h"
-#include "System/SpringApp.h"
 #include "System/Util.h"
 #include "System/Input/KeyInput.h"
 #include "System/FileSystem/ArchiveScanner.h"

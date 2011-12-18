@@ -47,7 +47,7 @@ void MainFunc(int argc, char** argv, int* ret) {
 #endif
 
 	try {
-		SpringApp app;
+        SpringApp app(argc, argv);
 		*ret = app.Run(argc, argv);
 	} CATCH_SPRING_ERRORS
 }

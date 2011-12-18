@@ -4,7 +4,9 @@
 #define SPRING_APP
 
 #include <string>
+#include <QApplication>
 #include <boost/cstdint.hpp>
+
 
 class CmdLineParams;
 class CGameController;
@@ -15,10 +17,12 @@ union SDL_Event;
  *
  * Main Spring application class launched by main()
  */
-class SpringApp
+class SpringApp : public QApplication
 {
+    Q_OBJECT
 public:
-	SpringApp();
+    explicit SpringApp(int argc, char *argv[]);
+
 	~SpringApp();
 
 	int Run(int argc, char *argv[]);                //!< Run game loop

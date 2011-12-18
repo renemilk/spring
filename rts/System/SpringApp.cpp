@@ -2,7 +2,7 @@
 
 #include <sstream>
 #include <iostream>
-
+#include "System/SpringApp.h"
 #include <SDL.h>
 #if !defined(HEADLESS)
 	#include <SDL_syswm.h>
@@ -11,7 +11,6 @@
 #include "System/mmgr.h"
 
 #include "Rendering/GL/myGL.h"
-#include "System/SpringApp.h"
 
 #include "aGui/Gui.h"
 #include "ExternalAI/IAILibraryManager.h"
@@ -128,14 +127,6 @@ static bool MultisampleVerify()
 	return false;
 }
 
-
-/**
- * Initializes SpringApp variables
- */
-SpringApp::SpringApp()
-	: cmdline(NULL)
-{
-}
 
 /**
  * Destroys SpringApp variables
@@ -663,7 +654,7 @@ void SpringApp::InitOpenGL()
 
 void SpringApp::LoadFonts()
 {
-	// Initialize font
+    // Initialize ::font
 	const std::string fontFile = configHandler->GetString("FontFile");
 	const std::string smallFontFile = configHandler->GetString("SmallFontFile");
 	const int fontSize = configHandler->GetInt("FontSize");
@@ -673,29 +664,29 @@ void SpringApp::LoadFonts()
 	const int smallOutlineWidth = configHandler->GetInt("SmallFontOutlineWidth");
 	const float smallOutlineWeight = configHandler->GetFloat("SmallFontOutlineWeight");
 
-	SafeDelete(font);
+    SafeDelete(::font);
 	SafeDelete(smallFont);
-	font = CglFont::LoadFont(fontFile, fontSize, outlineWidth, outlineWeight);
+    ::font = CglFont::LoadFont(fontFile, fontSize, outlineWidth, outlineWeight);
 	smallFont = CglFont::LoadFont(smallFontFile, smallFontSize, smallOutlineWidth, smallOutlineWeight);
 
-	if (!font || !smallFont) {
+    if (!::font || !smallFont) {
 		const std::vector<std::string> &fonts = CFileHandler::DirList("fonts/", "*.*tf", SPRING_VFS_RAW_FIRST);
 		std::vector<std::string>::const_iterator fi = fonts.begin();
 		while (fi != fonts.end()) {
-			SafeDelete(font);
+            SafeDelete(::font);
 			SafeDelete(smallFont);
-			font = CglFont::LoadFont(*fi, fontSize, outlineWidth, outlineWeight);
+            ::font = CglFont::LoadFont(*fi, fontSize, outlineWidth, outlineWeight);
 			smallFont = CglFont::LoadFont(*fi, smallFontSize, smallOutlineWidth, smallOutlineWeight);
-			if (font && smallFont) {
+            if (::font && smallFont) {
 				break;
 			} else {
 				++fi;
 			}
 		}
-		if (!font) {
-			throw content_error(std::string("Failed to load font: ") + fontFile);
+        if (!::font) {
+            throw content_error(std::string("Failed to load ::font: ") + fontFile);
 		} else if (!smallFont) {
-			throw content_error(std::string("Failed to load font: ") + smallFontFile);
+            throw content_error(std::string("Failed to load ::font: ") + smallFontFile);
 		}
 		configHandler->SetString("FontFile", *fi);
 		configHandler->SetString("SmallFontFile", *fi);
@@ -1023,7 +1014,7 @@ void SpringApp::Shutdown()
 	DeleteAndNull(gameSetup);
 	CLoadScreen::DeleteInstance();
 	ISound::Shutdown();
-	DeleteAndNull(font);
+    DeleteAndNull(::font);
 	DeleteAndNull(smallFont);
 	CNamedTextures::Kill();
 	GLContext::Free();
@@ -1194,5 +1185,11 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 			break;
 	}
 
-	return false;
+    return false;
+}
+
+SpringApp::SpringApp(int argc, char *argv[])
+    :QApplication(argc, argv)
+    , cmdline(NULL)
+{
 }

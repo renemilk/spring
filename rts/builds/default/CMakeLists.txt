@@ -21,6 +21,9 @@ LIST(APPEND engineLibraries ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY} ${GLEW_LI
 FIND_PACKAGE(Freetype REQUIRED)
 LIST(APPEND engineLibraries ${FREETYPE_LIBRARIES})
 
+
+# MESSAGE( STATUS ${QT_DEFINITIONS})
+
 IF    (UNIX)
 	FIND_PACKAGE(X11 REQUIRED)
 	LIST(APPEND engineLibraries ${X11_X11_LIB} ${X11_Xcursor_LIB})
@@ -51,8 +54,12 @@ ENDIF (WIN32)
 
 
 ### Build the executable
-ADD_EXECUTABLE(engine-default ${engineSources} ${ENGINE_ICON} ${engineHeaders})
-TARGET_LINK_LIBRARIES(engine-default ${engineLibraries})
+	FIND_PACKAGE(Qt4 REQUIRED)
+	INCLUDE(${QT_USE_FILE})
+	ADD_DEFINITIONS(${QT_DEFINITIONS})
+	QT4_WRAP_CPP(engine_System_HEADERS_MOC "${ENGINE_SRC_ROOT_DIR}/System/SpringApp.h" )
+ADD_EXECUTABLE(engine-default ${engineSources} ${engineHeaders} ${engine_System_HEADERS_MOC} ${ENGINE_ICON} )
+TARGET_LINK_LIBRARIES(engine-default ${engineLibraries}  ${QT_LIBRARIES})
 SET_TARGET_PROPERTIES(engine-default PROPERTIES OUTPUT_NAME "spring")
 
 
