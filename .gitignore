@@ -89,3 +89,4 @@ progress.make
 #installer downloaded/generated stuff
 /installer/Springlobby/
 /installer/*.exe
+build-*/

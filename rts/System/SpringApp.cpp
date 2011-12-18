@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iostream>
 #include "System/SpringApp.h"
+#include "aGui/Gui.h"//needs to be before sdl,mmgr,or myGL
 #include <SDL.h>
 #if !defined(HEADLESS)
 	#include <SDL_syswm.h>
@@ -12,7 +13,6 @@
 
 #include "Rendering/GL/myGL.h"
 
-#include "aGui/Gui.h"
 #include "ExternalAI/IAILibraryManager.h"
 #include "Game/ClientSetup.h"
 #include "Game/GameServer.h"

@@ -1,6 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include "Rendering/GL/myGL.h"
+#include "aGui/Gui.h"
 #include <map>
 #include <SDL_keysym.h>
 #include <SDL_timer.h>
@@ -24,7 +25,6 @@
 #include "System/TimeProfiler.h"
 #include "UI/InfoConsole.h"
 
-#include "aGui/Gui.h"
 #include "ExternalAI/SkirmishAIHandler.h"
 #include "Rendering/glFont.h"
 #include "Sim/Misc/GlobalSynced.h"
