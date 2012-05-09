@@ -35,6 +35,7 @@
 /******************************************************************************/
 
 CONFIG(std::string, RotateLogFiles).defaultValue("auto");
+CONFIG(std::string, InfologFilename).defaultValue("infolog.txt");
 CONFIG(std::string, LogSections).defaultValue("");
 CONFIG(std::string, LogSubsystems).defaultValue(""); // XXX deprecated on 22. August 2011, before the 0.83 release
 
@@ -60,6 +61,7 @@ CLogOutput::CLogOutput()
 	std::string rotatePolicy = "auto";
 	if (configHandler != NULL) {
 		rotatePolicy = configHandler->GetString("RotateLogFiles");
+		SetFilename( configHandler->GetString("InfologFilename") );
 	}
 	if (rotatePolicy == "always") {
 		doRotateLogFiles = true;
